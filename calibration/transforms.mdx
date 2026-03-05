@@ -241,10 +241,15 @@ The dataset provides a Python utility to load and work with transforms using the
 
 ### Loading Transforms
 
-```python demo/transforms.py
+```python
 import numpy as np
 from pytransform3d.transform_manager import TransformManager
-from demo.transforms import get_tf_manager
+
+# Import from the exported dataset structure
+from dataset.calibration.tf_demo.transforms import get_tf_manager
+
+# Or if working directly with the source repository
+# from demo.transforms import get_tf_manager
 
 # Load the complete transform tree
 tm = get_tf_manager()
