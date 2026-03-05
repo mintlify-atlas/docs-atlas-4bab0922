@@ -1,0 +1,101 @@
+{
+  "projectType": "data-platform",
+  "projectName": "UXO Dataset 2024",
+  "projectDescription": "An acoustic and optical dataset for the perception of underwater unexploded ordnance (UXO)",
+  "theme": "linden",
+  "primaryColor": "#377cc7",
+  "lightColor": "#6380bc",
+  "darkColor": "#ba869b",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "introduction",
+              "dataset-properties",
+              "citation"
+            ]
+          },
+          {
+            "group": "Getting Started",
+            "pages": [
+              "getting-started/access",
+              "getting-started/installation",
+              "getting-started/viewing-data"
+            ]
+          },
+          {
+            "group": "Dataset Structure",
+            "pages": [
+              "structure/overview",
+              "structure/file-formats",
+              "structure/recordings",
+              "structure/targets"
+            ]
+          },
+          {
+            "group": "Processing Pipeline",
+            "pages": [
+              "processing/overview",
+              "processing/aris-extraction",
+              "processing/gopro-processing",
+              "processing/gantry-extraction",
+              "processing/export"
+            ]
+          },
+          {
+            "group": "Calibration",
+            "pages": [
+              "calibration/transforms",
+              "calibration/camera-parameters"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Scripts",
+            "pages": [
+              "api/view-recording",
+              "api/export-script"
+            ]
+          },
+          {
+            "group": "Common Modules",
+            "pages": [
+              "api/aris-definitions",
+              "api/matching-context",
+              "api/optical-flow"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "ARIS Explorer 3000 imaging sonar scans of UXO",
+    "Synchronized GoPro Hero 8 optical footage",
+    "Annotated camera frames with bounding boxes",
+    "Accurate transforms between sonar and targets",
+    "3D textured models of UXO targets",
+    "Calibration matrices and metadata",
+    "Processing and export scripts",
+    "Viewer tool for synchronized playback"
+  ],
+  "publicApiSurface": [
+    "scripts/view_recording.py",
+    "scripts/release_1_export.py",
+    "scripts/prep_1_aris_extract.py",
+    "scripts/prep_2_aris_to_polar.py",
+    "scripts/prep_5_gantry_extract.py",
+    "common.aris_definitions.FrameHeaderFields",
+    "common.matching_context.MatchingContext",
+    "common.optical_flow",
+    "demo.transforms"
+  ]
+}
