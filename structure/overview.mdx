@@ -1,0 +1,147 @@
+---
+title: Dataset Structure Overview
+description: Organization and naming conventions for the UXO Dataset 2024
+---
+
+The UXO Dataset 2024 is organized into a hierarchical structure that separates recordings by target type and includes supporting files for calibration, 3D models, and processing scripts.
+
+## Directory Structure
+
+The exported dataset follows this organization:
+
+```
+uxo-dataset2024/
+├── recordings/
+│   ├── 100lbs/
+│   │   ├── <recording-folder>/
+│   │   │   ├── aris_raw/
+│   │   │   ├── aris_polar/
+│   │   │   ├── gopro/
+│   │   │   ├── aris_frame_meta.csv
+│   │   │   ├── aris_file_meta.yaml
+│   │   │   ├── gantry.csv
+│   │   │   ├── ar3.csv
+│   │   │   └── notes.txt
+│   ├── mortar_shell/
+│   ├── incendiary/
+│   ├── cylinder/
+│   └── 100lbs_floor/
+├── calibration/
+│   └── transforms.yaml
+├── 3d_models/
+├── scripts/
+├── README.md
+└── preview.jpg
+```
+
+## Naming Conventions
+
+### Recording Folders
+
+Recording folders are organized by target type and contain all synchronized data for a single trajectory:
+
+- **Target type**: The first level of organization (e.g., `100lbs`, `mortar_shell`, `incendiary`)
+- **Recording name**: Derived from the original ARIS recording filename
+
+### Frame Files
+
+All frames within a recording use a consistent 4-digit zero-padded naming scheme:
+
+```
+0000.pgm   # ARIS raw frame at index 0
+0000.png   # ARIS polar frame at index 0
+0000.jpg   # GoPro frame synchronized to ARIS frame 0
+0001.pgm   # ARIS raw frame at index 1
+...
+```
+
+<Note>
+The frame index corresponds to the ARIS frame index, which serves as the primary synchronization reference for all other sensors.
+</Note>
+
+## Data Organization Principles
+
+### ARIS-Centric Synchronization
+
+All data in the dataset is synchronized to the ARIS sonar frames:
+
+- **ARIS frames** serve as the temporal reference
+- **GoPro frames** are matched to the closest ARIS frame timestamp
+- **Gantry positions** are interpolated to match ARIS frame times
+- **AR3 poses** are calculated from gantry positions and ARIS metadata
+
+### Motion Trimming
+
+Recordings are trimmed to include only the active motion period:
+
+1. Motion onset is detected in the ARIS data (using optical flow)
+2. GoPro and gantry data are trimmed to match
+3. When `export_only_with_gopro` is enabled, frames without matching GoPro footage are excluded
+
+From `release_1_export.py:108`:
+```python
+# If gopro footage is available, only export data when a gopro frame is also available
+if trim_from_gopro and gopro_frame is None:
+    continue
+```
+
+## Target Types
+
+The dataset includes recordings of five distinct UXO target types:
+
+<CardGroup cols={2}>
+  <Card title="100lbs Bomb" icon="bomb">
+    Main target: Standard 100-pound bomb
+  </Card>
+  <Card title="Mortar Shell" icon="circle">
+    Military mortar shell ordnance
+  </Card>
+  <Card title="Incendiary" icon="fire">
+    Incendiary device
+  </Card>
+  <Card title="Cylinder" icon="cylinder">
+    Cylindrical test object
+  </Card>
+  <Card title="100lbs Floor" icon="bomb">
+    100-pound bomb on floor position
+  </Card>
+</CardGroup>
+
+Target types are automatically determined from the `notes.txt` file in each recording. See the `get_target_type()` function in `release_1_export.py:38`.
+
+## Export Configuration
+
+The dataset export process is controlled by several configuration parameters in `config.yaml`:
+
+| Parameter | Description | Default |
+|-----------|-------------|--------|
+| `export_gopro_resolution` | GoPro resolution (fhd, uhd, etc.) | `fhd` |
+| `export_gopro_format` | GoPro image format | `jpg` |
+| `aris_to_polar_image_format` | Polar ARIS format | `png` |
+| `export_only_with_gopro` | Trim to frames with GoPro data | `true` |
+
+## File Count Statistics
+
+A typical recording contains:
+
+- **ARIS frames**: 100-1000+ frames per recording
+- **Total dataset**: Close to 100 trajectories and over 74,000 frames
+- **Matched camera frames**: Most sonar frames have corresponding GoPro images
+
+<Warning>
+When viewing GoPro labels, multiply coordinates by 3 due to the downsampling from UHD to lower resolutions.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="File Formats" href="/structure/file-formats">
+    Learn about the specific file formats used in the dataset
+  </Card>
+  <Card title="Recording Structure" href="/structure/recordings">
+    Understand the contents of each recording folder
+  </Card>
+  <Card title="Target Details" href="/structure/targets">
+    Explore the UXO targets and their specifications
+  </Card>
+</CardGroup>

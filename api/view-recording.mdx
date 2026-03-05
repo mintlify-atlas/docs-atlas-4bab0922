@@ -1,0 +1,189 @@
+---
+title: 'view_recording.py'
+description: 'Interactive PyQt5 viewer for exploring UXO dataset recordings'
+---
+
+## Overview
+
+The `view_recording.py` script provides an interactive GUI application for viewing and exploring individual recordings from the UXO Dataset. Built with PyQt5, it displays synchronized ARIS sonar imagery, GoPro camera footage, gantry positioning data, and frame metadata.
+
+## Command-Line Usage
+
+```bash
+python view_recording.py <recording_dir> [options]
+```
+
+### Arguments
+
+<ParamField path="recording_dir" type="string" required>
+  Path to the recording directory containing the ARIS frames, GoPro frames, gantry data, and metadata files.
+</ParamField>
+
+### Options
+
+<ParamField path="-p, --polar" type="boolean" default="True">
+  Use polar-transformed ARIS images instead of raw images. When enabled, reads from `aris_polar/` directory; otherwise uses `aris_raw/`.
+</ParamField>
+
+<ParamField path="-c, --colorize" type="boolean" default="True">
+  Apply colormap to ARIS images. Uses OpenCV's `COLORMAP_TWILIGHT_SHIFTED` to enhance visualization.
+</ParamField>
+
+<ParamField path="-l, --use-lru-cache" type="boolean" default="False">
+  Enable LRU caching for frame loading. Improves performance when repeatedly viewing the same frames at the cost of memory usage.
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash Basic Usage
+# View a recording with default settings
+python view_recording.py data/recordings/barrel/2024_05_15_001
+```
+
+```bash Raw Images
+# View raw (non-polar) ARIS images without colorization
+python view_recording.py data/recordings/barrel/2024_05_15_001 --no-polar --no-colorize
+```
+
+```bash Performance
+# Enable caching for faster frame navigation
+python view_recording.py data/recordings/barrel/2024_05_15_001 --use-lru-cache
+```
+
+</CodeGroup>
+
+## DatasetViewer Class
+
+The main class that implements the interactive viewer application.
+
+### Constructor
+
+```python
+DatasetViewer(
+    recording_dir: str,
+    aris_polar: bool = True,
+    aris_colorize: bool = True,
+    use_lru_cache: bool = False
+)
+```
+
+<ParamField path="recording_dir" type="str" required>
+  Path to the recording directory
+</ParamField>
+
+<ParamField path="aris_polar" type="bool" default="True">
+  Whether to load polar-transformed ARIS images
+</ParamField>
+
+<ParamField path="aris_colorize" type="bool" default="True">
+  Whether to apply colormap to ARIS images
+</ParamField>
+
+<ParamField path="use_lru_cache" type="bool" default="False">
+  Whether to enable frame caching
+</ParamField>
+
+### Key Methods
+
+#### get_data()
+
+Retrieves all data for a specific frame position.
+
+```python
+def get_data(self, pos: int) -> tuple:
+    """Returns (aris_frame_idx, aris, gopro, gantry, frame_meta)"""
+```
+
+**Returns:**
+- `aris_frame_idx` (int): The ARIS frame index
+- `aris` (QPixmap): ARIS sonar image
+- `gopro` (QPixmap): GoPro camera frame
+- `gantry` (pd.Series): Gantry position data (x, y, z)
+- `frame_meta` (pd.Series): ARIS frame metadata
+
+### Data Files Required
+
+The viewer expects the following files in the recording directory:
+
+| File/Directory | Description |
+|----------------|-------------|
+| `aris_polar/` or `aris_raw/` | Directory containing ARIS frame images |
+| `gopro/` | Directory containing GoPro frame images |
+| `gantry.csv` | Gantry positioning data indexed by `aris_frame_idx` |
+| `aris_frame_meta.csv` | Per-frame ARIS metadata indexed by `frame_index` |
+| `aris_file_meta.yaml` | ARIS file-level metadata |
+| `notes.txt` | Recording notes (optional) |
+
+## Keyboard Controls
+
+The viewer supports keyboard navigation for efficient frame browsing:
+
+<CodeGroup>
+
+```text Navigation
+Left Arrow    : Previous frame
+Right Arrow   : Next frame
+Up Arrow      : Skip forward 10 frames
+Down Arrow    : Skip backward 10 frames
+Q             : Quit application
+```
+
+</CodeGroup>
+
+<Note>
+  The slider can also be used for direct frame navigation by clicking or dragging.
+</Note>
+
+## GUI Layout
+
+The viewer window is divided into several sections:
+
+### Left Panel
+- **ARIS Display**: Shows the sonar imagery with optional colorization
+
+### Right Panel
+- **GoPro Display**: Synchronized optical camera footage
+- **Position Info**: Current frame index and total frame count
+- **Gantry Info**: Real-time gantry position (x, y, z coordinates)
+- **Notes**: Recording notes and target information
+- **File Metadata**: ARIS file-level metadata
+- **Frame Metadata**: Per-frame ARIS header information
+
+### Bottom
+- **Slider**: Frame navigation control
+
+## Image Processing
+
+The viewer applies several transformations to the ARIS imagery:
+
+1. **Polar Transformation**: When using raw images (`--no-polar`), the viewer flips the image to correct beam ordering (right-to-left to left-to-right)
+
+2. **Colorization**: When enabled (default), applies OpenCV's `COLORMAP_TWILIGHT_SHIFTED` colormap to enhance visualization
+
+3. **Aspect Ratio**: Images are automatically scaled to fit the window while maintaining aspect ratio
+
+## Performance Considerations
+
+<Tip>
+  Enable `--use-lru-cache` when working with recordings you'll navigate repeatedly. This caches loaded frames in memory for instant access.
+</Tip>
+
+<Warning>
+  The LRU cache has no size limit when enabled. For large recordings or limited memory systems, leave caching disabled.
+</Warning>
+
+## Dependencies
+
+The script requires the following Python packages:
+
+- `PyQt5` - GUI framework
+- `opencv-python` (cv2) - Image processing
+- `pandas` - Data handling
+- `PyYAML` - Configuration loading
+
+And custom modules from the UXO Dataset codebase:
+- `common.matching_context`
+- `common.aris_definitions`
+- `common.q_custom_widgets`

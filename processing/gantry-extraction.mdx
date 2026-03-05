@@ -1,0 +1,390 @@
+---
+title: Gantry Extraction
+description: Extract trajectory data from ROS bags and detect motion onsets
+---
+
+The custom-designed gantry crane records its trajectory as ROS (Robot Operating System) messages in `.bag` files. These scripts extract 3D position data and automatically detect motion onset times.
+
+## Pipeline Stages
+
+Gantry processing consists of two scripts:
+
+1. **prep_5_gantry_extract.py** - Extract trajectories from ROS bags
+2. **prep_6_gantry_find_offsets.py** - Automatically detect motion onsets
+
+<Warning>
+These scripts require ROS1. You may need:
+- Ubuntu 20.04 Docker container
+- [robostack](https://robostack.github.io/) for ROS environment setup
+</Warning>
+
+## Step 1: Trajectory Extraction (prep_5_gantry_extract.py)
+
+### Purpose
+
+Extracts gantry crane position data from ROS bag files and exports as CSV. The gantry published odometry messages on the `/odom` topic during recordings.
+
+### ROS Message Structure
+
+The script reads messages from the `/odom` topic:
+
+```python
+# Message type: nav_msgs/Odometry
+msg.header.stamp          # ROS timestamp
+msg.pose.pose.position.x  # X coordinate (meters)
+msg.pose.pose.position.y  # Y coordinate (meters)  
+msg.pose.pose.position.z  # Z coordinate (meters)
+```
+
+### Timestamp Conversion
+
+ROS timestamps are converted to microseconds:
+
+```python
+def stamp_to_microseconds(stamp):
+    return int(stamp.secs * 1e6) + int(stamp.nsecs // 1e3)
+```
+
+### Time Zone Adjustment
+
+The gantry system used a different time zone than the ARIS. A configurable offset corrects this:
+
+```yaml config.yaml
+gantry_time_adjust: 2  # Adjustment in hours
+```
+
+Timestamps are adjusted during extraction:
+
+```python
+t = stamp_to_microseconds(stamp) + time_adjust * 3600 * 1e6
+```
+
+### Configuration
+
+```yaml config.yaml
+gantry_input: "../data_raw/gantry"        # Location of .bag files
+gantry_extract: "../data_processed/gantry" # Output directory
+gantry_time_adjust: 2                      # Timezone adjustment (hours)
+```
+
+### Usage
+
+```bash
+python scripts/prep_5_gantry_extract.py
+```
+
+Requires Python with ROS1 packages (`rosbag`, `rospy`).
+
+### Output Structure
+
+```
+gantry_extract/
+├── 20230920_aris01.csv  # Trajectory for aris01 recording
+├── 20230920_aris02.csv  # Trajectory for aris02 recording
+└── ...
+```
+
+Each CSV file contains:
+
+| Column | Description |
+|--------|-------------|
+| `timestamp_us` | Adjusted timestamp in microseconds |
+| `x` | X position in meters |
+| `y` | Y position in meters |
+| `z` | Z position in meters |
+
+### Example Output
+
+```csv
+timestamp_us,x,y,z
+1695214657940000,0.523,1.234,0.892
+1695214657950000,0.524,1.235,0.892
+1695214657960000,0.525,1.236,0.893
+...
+```
+
+## Step 2: Motion Onset Detection (prep_6_gantry_find_offsets.py)
+
+### Purpose
+
+Automatically detects when the gantry crane starts moving in each trajectory. This is critical for:
+- Synchronizing with ARIS recordings
+- Trimming data to relevant portions
+- Identifying the active trajectory segment
+
+### Detection Algorithm
+
+Motion onset is found by detecting the first change in X or Y position:
+
+```python
+def find_motion_onset(csv_file):
+    data = pd.read_csv(csv_file)
+    
+    # Calculate position differences
+    diff = data['x'].diff() + data['y'].diff()
+    diff[diff.isna()] = 0.  # First row has NaN diff
+    
+    # Find first non-zero change
+    onset_idx = diff.ne(0).idxmax()
+    
+    onset = data['timestamp_us'].iloc[onset_idx]
+    start = data['timestamp_us'].iloc[0]
+    end = data['timestamp_us'].iloc[-1]
+    
+    return start, end, onset
+```
+
+<Note>
+Z-axis is not used for onset detection as it may change due to calibration before XY motion begins.
+</Note>
+
+### Configuration
+
+No additional configuration needed - uses the same `gantry_extract` path from `config.yaml`.
+
+### Usage
+
+```bash
+python scripts/prep_6_gantry_find_offsets.py
+```
+
+### Output
+
+Creates a metadata file summarizing all trajectories:
+
+```
+gantry_extract/
+└── gantry_metadata.csv
+```
+
+Contents:
+
+| Column | Description |
+|--------|-------------|
+| `file` | Trajectory CSV filename |
+| `start_us` | First timestamp in recording |
+| `end_us` | Last timestamp in recording |
+| `onset_us` | Timestamp when motion begins |
+
+### Example Output
+
+```csv
+file,start_us,end_us,onset_us
+20230920_aris01.csv,1695214657000000,1695214713000000,1695214660450000
+20230920_aris02.csv,1695215891000000,1695215947000000,1695215894230000
+...
+```
+
+The script also prints the delay between recording start and motion onset:
+
+```
+20230920_aris01.csv ... 3.45
+20230920_aris02.csv ... 3.23
+```
+
+Values are in seconds.
+
+## Coordinate System
+
+The gantry crane provides positions in a right-handed coordinate system:
+
+- **X-axis**: Horizontal motion (meters)
+- **Y-axis**: Horizontal motion perpendicular to X (meters)
+- **Z-axis**: Vertical motion (depth, meters)
+- **Origin**: Fixed reference point on gantry structure
+
+### Transform to Sonar Frame
+
+The export script (`release_1_export.py`) transforms gantry positions to the ARIS (AR3) reference frame using calibration matrices:
+
+```python
+tm = get_tf_manager()  # Transform manager
+
+# Set gantry position
+A2B = np.eye(4)
+A2B[:3,3] = np.array([x, y, z])
+tm.add_transform("setup/portal_crane", "world", A2B=A2B)
+
+# Get ARIS position in world frame
+ar3_pos = tm.get_transform("setup/ar3", "world")[:3, 3]
+```
+
+The resulting `ar3.csv` file in the exported dataset contains ARIS positions, not raw gantry positions.
+
+## Synchronization with ARIS
+
+Gantry data is synchronized to ARIS frames during export:
+
+1. **ARIS provides frame timestamps** from its internal clock
+2. **Gantry onset time** is compared to ARIS motion onset
+3. **Temporal offset** is calculated (may be manually adjusted)
+4. **For each ARIS frame**, the closest gantry position is selected
+
+```python
+frametime = ctx.get_aris_frametime(aris_frame_idx)
+(x, y, z), _ = ctx.get_gantry_odom(frametime + gantry_offset)
+```
+
+## Time Synchronization Details
+
+### Why Time Adjustment is Needed
+
+The dataset has three independent time sources:
+
+1. **ARIS**: Internal clock, microsecond timestamps
+2. **Gantry (ROS)**: System time when ROS bag recorded
+3. **GoPro**: No reliable timestamps
+
+The `gantry_time_adjust` parameter corrects for:
+- Different time zones during recording
+- Clock drift between systems
+- Recording setup delays
+
+### Determining the Correct Offset
+
+The 2-hour offset was determined by:
+1. Comparing ARIS and gantry motion onset times
+2. Adjusting until temporal alignment was achieved
+3. Verifying with known synchronization events
+
+<Note>
+If you're processing your own recordings, you'll need to calculate the appropriate time adjustment for your setup.
+</Note>
+
+## ROS Environment Setup
+
+### Option 1: Ubuntu 20.04 Docker
+
+```bash
+# Pull ROS Noetic image
+docker pull ros:noetic
+
+# Run with volume mount
+docker run -it --rm \
+  -v /path/to/uxo-dataset2024:/workspace \
+  ros:noetic bash
+
+# Inside container
+apt update && apt install -y python3-pip
+pip3 install pyyaml pandas tqdm
+cd /workspace/scripts
+python3 prep_5_gantry_extract.py
+```
+
+### Option 2: Robostack
+
+```bash
+# Create conda environment with ROS
+conda create -n ros-env python=3.8
+conda activate ros-env
+
+# Add robostack channels
+conda config --add channels conda-forge
+conda config --add channels robostack-staging
+conda config --set channel_priority strict
+
+# Install ROS Noetic
+conda install ros-noetic-desktop
+
+# Install Python dependencies
+conda install pyyaml pandas tqdm
+
+# Run scripts
+python scripts/prep_5_gantry_extract.py
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="ImportError: No module named 'rosbag'">
+    You're not in a ROS environment. Use Docker or robostack as described above.
+  </Accordion>
+  
+  <Accordion title="No messages found on /odom topic">
+    Check your bag file:
+    ```bash
+    rosbag info path/to/file.bag
+    ```
+    
+    Look for `/odom` topic. If missing, the bag may be from a different system or corrupted.
+  </Accordion>
+  
+  <Accordion title="Motion onset detection seems wrong">
+    Inspect the trajectory CSV manually:
+    ```bash
+    head -n 50 gantry_extract/20230920_aris01.csv
+    ```
+    
+    Verify that X and Y remain constant initially, then start changing. If the gantry was already moving when recording started, onset will be at index 0.
+  </Accordion>
+  
+  <Accordion title="Time adjustment seems incorrect">
+    The 2-hour offset is specific to this dataset's recording conditions. For your own data:
+    1. Compare ARIS and gantry motion onset times
+    2. Calculate the difference in hours
+    3. Update `gantry_time_adjust` in config.yaml
+  </Accordion>
+</AccordionGroup>
+
+## Data Quality Checks
+
+After extraction, verify data quality:
+
+<Tabs>
+  <Tab title="Trajectory Continuity">
+    Check for gaps in timestamps:
+    ```python
+    import pandas as pd
+    df = pd.read_csv('gantry_extract/20230920_aris01.csv')
+    time_diffs = df['timestamp_us'].diff()
+    print(f"Max gap: {time_diffs.max() / 1e6:.2f} seconds")
+    print(f"Expected: ~0.01 seconds (100 Hz)")
+    ```
+  </Tab>
+  
+  <Tab title="Position Bounds">
+    Verify positions are within gantry workspace:
+    ```python
+    df = pd.read_csv('gantry_extract/20230920_aris01.csv')
+    print(df[['x', 'y', 'z']].describe())
+    ```
+    
+    Expected ranges (approximate):
+    - X: 0-2 meters
+    - Y: 0-2 meters
+    - Z: 0-2 meters
+  </Tab>
+  
+  <Tab title="Motion Detection">
+    Review onset times in gantry_metadata.csv:
+    ```python
+    df = pd.read_csv('gantry_extract/gantry_metadata.csv')
+    df['delay_sec'] = (df['onset_us'] - df['start_us']) / 1e6
+    print(df[['file', 'delay_sec']])
+    ```
+    
+    Typical delays: 2-5 seconds before motion begins.
+  </Tab>
+</Tabs>
+
+## Integration with Export Pipeline
+
+Gantry data is used during export to:
+
+1. **Provide gantry positions** for each ARIS frame
+2. **Calculate ARIS positions** via transform chains
+3. **Enable trajectory visualization** in the dataset
+4. **Support time synchronization** across sensors
+
+See [Export](./export) for how gantry data is incorporated into the final dataset.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="GoPro Processing" icon="video" href="./gopro-processing">
+    Complete sensor preprocessing with GoPro footage
+  </Card>
+  <Card title="Export" icon="box-archive" href="./export">
+    Assemble all data into the final dataset
+  </Card>
+</CardGroup>

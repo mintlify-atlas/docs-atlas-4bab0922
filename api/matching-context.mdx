@@ -1,0 +1,422 @@
+---
+title: "Matching Context"
+description: "Synchronization and data access for ARIS, GoPro, and gantry recordings"
+---
+
+## Overview
+
+The `MatchingContext` class provides a unified interface for accessing and synchronizing multi-modal data from ARIS sonar recordings, GoPro video, and gantry positioning systems. It handles temporal alignment, metadata loading, and frame-by-frame data access across all three data sources.
+
+**Module Path:** `scripts/common/matching_context.py`
+
+## Class: MatchingContext
+
+### Constructor
+
+```python
+MatchingContext(
+    aris_dir: str,
+    gantry_file: str,
+    gopro_file: str,
+    polar_img_format: str = 'png'
+)
+```
+
+<ParamField path="aris_dir" type="str" required>
+  Path to the directory containing ARIS data files, including:
+  - Raw frames (`.pgm` files)
+  - Polar-transformed frames in `polar/` subdirectory
+  - `{basename}_metadata.yaml` - File-level metadata
+  - `{basename}_frames.csv` - Per-frame metadata
+  - `{basename}_marks.yaml` - Optional motion onset markers
+</ParamField>
+
+<ParamField path="gantry_file" type="str" required>
+  Path to the gantry CSV data file containing timestamp and position columns
+</ParamField>
+
+<ParamField path="gopro_file" type="str" required>
+  Path to the GoPro video file (MP4, AVI, etc.). Pass empty string or None if no GoPro data available
+</ParamField>
+
+<ParamField path="polar_img_format" type="str" default="png">
+  Image format for polar-transformed ARIS frames (e.g., 'png', 'jpg')
+</ParamField>
+
+### Key Properties
+
+#### ARIS Properties
+
+<ResponseField name="aris_basename" type="str">
+  Base name of the ARIS recording (derived from directory name)
+</ResponseField>
+
+<ResponseField name="aris_frames_raw" type="list[str]">
+  Sorted list of file paths to raw ARIS frame images (.pgm format)
+</ResponseField>
+
+<ResponseField name="aris_frames_polar" type="list[str] | None">
+  Sorted list of file paths to polar-transformed ARIS frames, or None if unavailable
+</ResponseField>
+
+<ResponseField name="aris_file_meta" type="dict">
+  File-level metadata loaded from YAML
+</ResponseField>
+
+<ResponseField name="aris_frames_meta" type="pd.DataFrame">
+  Per-frame metadata with columns matching FrameHeaderFields enum
+</ResponseField>
+
+<ResponseField name="aris_marks_meta" type="dict | None">
+  Manual marks/annotations, including motion onset frame if available
+</ResponseField>
+
+<ResponseField name="aris_frames_total" type="int">
+  Total number of ARIS frames in the recording
+</ResponseField>
+
+<ResponseField name="aris_t0" type="int">
+  Start timestamp of ARIS recording (microseconds since epoch)
+</ResponseField>
+
+<ResponseField name="aris_duration" type="int">
+  Duration of ARIS recording in microseconds
+</ResponseField>
+
+<ResponseField name="aris_motion_onset" type="int | None">
+  Frame index where motion begins, if marked
+</ResponseField>
+
+<ResponseField name="aris_start_frame" type="int">
+  Starting frame index for active region (defaults to onset if marked, else 0)
+</ResponseField>
+
+<ResponseField name="aris_end_frame" type="int">
+  Ending frame index for active region (defaults to last frame)
+</ResponseField>
+
+<ResponseField name="aris_active_frames" type="int">
+  Number of frames in the active region
+</ResponseField>
+
+<ResponseField name="aris_active_duration" type="int">
+  Duration of active region in microseconds
+</ResponseField>
+
+<ResponseField name="aris_tick_step" type="int">
+  Frame step size for playback/processing
+</ResponseField>
+
+#### Gantry Properties
+
+<ResponseField name="gantry_basename" type="str">
+  Base name of the gantry data file
+</ResponseField>
+
+<ResponseField name="gantry_meta" type="pd.Series">
+  Metadata row for this gantry recording from the metadata CSV
+</ResponseField>
+
+<ResponseField name="gantry_data" type="pd.DataFrame">
+  Gantry position data with columns: timestamp_us, x, y, z
+</ResponseField>
+
+<ResponseField name="gantry_t0" type="int">
+  Start timestamp of gantry recording (microseconds since epoch)
+</ResponseField>
+
+<ResponseField name="gantry_onset" type="int">
+  Timestamp when motion begins (microseconds since epoch)
+</ResponseField>
+
+<ResponseField name="gantry_duration" type="int">
+  Duration of gantry recording in microseconds
+</ResponseField>
+
+<ResponseField name="gantry_offset" type="int">
+  Time offset from start to motion onset in microseconds
+</ResponseField>
+
+#### GoPro Properties
+
+<ResponseField name="has_gopro" type="bool">
+  Whether GoPro video is available for this context
+</ResponseField>
+
+<ResponseField name="gopro_basename" type="str">
+  Base name of the GoPro video file
+</ResponseField>
+
+<ResponseField name="gopro_clip" type="cv2.VideoCapture">
+  OpenCV video capture object for the GoPro recording
+</ResponseField>
+
+<ResponseField name="gopro_frame_idx" type="int">
+  Current GoPro frame index
+</ResponseField>
+
+<ResponseField name="gopro_frames_total" type="int">
+  Total number of frames in the GoPro video
+</ResponseField>
+
+<ResponseField name="gopro_fps" type="float">
+  GoPro video frame rate
+</ResponseField>
+
+<ResponseField name="gopro_offset" type="int">
+  Frame offset for synchronizing GoPro with ARIS (adjustable)
+</ResponseField>
+
+### Methods
+
+#### get_aris_frametime
+
+```python
+def get_aris_frametime(frame_idx: int) -> int
+```
+
+Retrieves the timestamp for a specific ARIS frame.
+
+<ParamField path="frame_idx" type="int" required>
+  Frame index (0-based)
+</ParamField>
+
+<ResponseField name="timestamp" type="int">
+  Frame timestamp in microseconds since epoch (from FrameTime field)
+</ResponseField>
+
+#### get_aris_frametime_ext
+
+```python
+def get_aris_frametime_ext(frame_idx: int) -> int
+```
+
+Retrieves or extrapolates timestamp for frames outside the recorded range.
+
+<ParamField path="frame_idx" type="int" required>
+  Frame index (can be negative or beyond recording)
+</ParamField>
+
+<ResponseField name="timestamp" type="int">
+  Actual or extrapolated timestamp in microseconds since epoch
+</ResponseField>
+
+#### aristime_to_gopro_idx
+
+```python
+def aristime_to_gopro_idx(aris_frametime: int) -> int
+```
+
+Converts ARIS timestamp to corresponding GoPro frame index.
+
+<ParamField path="aris_frametime" type="int" required>
+  ARIS frame timestamp in microseconds since epoch
+</ParamField>
+
+<ResponseField name="gopro_idx" type="int">
+  Corresponding GoPro frame index, accounting for offset
+</ResponseField>
+
+#### get_gopro_frame
+
+```python
+def get_gopro_frame(
+    aris_frametime: int,
+    exact: bool = True
+) -> tuple[np.ndarray | None, int]
+```
+
+Retrieves the GoPro frame corresponding to an ARIS timestamp.
+
+<ParamField path="aris_frametime" type="int" required>
+  ARIS frame timestamp in microseconds since epoch
+</ParamField>
+
+<ParamField path="exact" type="bool" default="True">
+  If True, returns None if exact frame positioning fails
+</ParamField>
+
+<ResponseField name="frame" type="np.ndarray | None">
+  GoPro frame as BGR image array, or None if unavailable/positioning failed
+</ResponseField>
+
+<ResponseField name="frame_idx" type="int">
+  Actual GoPro frame index that was retrieved
+</ResponseField>
+
+#### get_usable_gopro_range
+
+```python
+def get_usable_gopro_range() -> tuple[int, int]
+```
+
+Calculates the valid range for GoPro offset adjustment.
+
+<ResponseField name="range_min" type="int">
+  Minimum useful offset (negative value)
+</ResponseField>
+
+<ResponseField name="range_max" type="int">
+  Maximum useful offset (total GoPro frames)
+</ResponseField>
+
+#### get_gantry_odom
+
+```python
+def get_gantry_odom(
+    aris_frametime: int
+) -> tuple[tuple[float, float, float], int]
+```
+
+Interpolates gantry position at a given ARIS timestamp.
+
+<ParamField path="aris_frametime" type="int" required>
+  ARIS frame timestamp in microseconds since epoch
+</ParamField>
+
+<ResponseField name="position" type="tuple[float, float, float]">
+  Interpolated (x, y, z) position in meters
+</ResponseField>
+
+<ResponseField name="timestamp" type="int">
+  Actual gantry timestamp used for interpolation (clamped to valid range)
+</ResponseField>
+
+## Helper Functions
+
+### folder_basename
+
+```python
+def folder_basename(s: str) -> str
+```
+
+Extracts the base name from a file or directory path, handling trailing slashes.
+
+### get_aris_metadata
+
+```python
+def get_aris_metadata(aris_data_dir: str) -> tuple[dict, pd.DataFrame, dict | None]
+```
+
+Loads and caches ARIS metadata files (file metadata, frame metadata, and marks).
+
+### get_gopro_metadata
+
+```python
+def get_gopro_metadata(gopro_files_dir: str) -> pd.DataFrame
+```
+
+Loads and caches GoPro metadata CSV.
+
+### get_gantry_metadata
+
+```python
+def get_gantry_metadata(gantry_files_dir: str) -> pd.DataFrame
+```
+
+Loads and caches gantry metadata CSV.
+
+## Usage Example
+
+```python
+import cv2
+import numpy as np
+from scripts.common.matching_context import MatchingContext
+
+# Initialize context
+ctx = MatchingContext(
+    aris_dir='/data/recordings/rec_001_aris',
+    gantry_file='/data/recordings/gantry/rec_001.csv',
+    gopro_file='/data/recordings/gopro/rec_001.mp4'
+)
+
+print(f"Recording: {ctx.recording_label}")
+print(f"ARIS frames: {ctx.aris_frames_total}")
+print(f"Active region: frames {ctx.aris_start_frame}-{ctx.aris_end_frame}")
+print(f"Duration: {ctx.aris_active_duration / 1e6:.2f} seconds")
+
+# Process synchronized data
+for aris_idx in range(ctx.aris_start_frame, ctx.aris_end_frame, ctx.aris_tick_step):
+    # Load ARIS frame
+    aris_frame = cv2.imread(ctx.aris_frames_raw[aris_idx], cv2.IMREAD_GRAYSCALE)
+    
+    # Get timestamp
+    aris_time = ctx.get_aris_frametime(aris_idx)
+    
+    # Get corresponding GoPro frame
+    if ctx.has_gopro:
+        gopro_frame, gopro_idx = ctx.get_gopro_frame(aris_time)
+        if gopro_frame is not None:
+            print(f"ARIS frame {aris_idx} synced with GoPro frame {gopro_idx}")
+    
+    # Get gantry position
+    (x, y, z), gantry_time = ctx.get_gantry_odom(aris_time)
+    print(f"Position at frame {aris_idx}: ({x:.3f}, {y:.3f}, {z:.3f}) m")
+
+# Adjust GoPro synchronization
+ctx.gopro_offset = 30  # Delay GoPro by 30 frames
+```
+
+## Common Workflows
+
+### Manual Synchronization
+
+```python
+# Display both streams for manual alignment
+aris_idx = ctx.aris_start_frame
+while True:
+    aris_frame = cv2.imread(ctx.aris_frames_raw[aris_idx], cv2.IMREAD_GRAYSCALE)
+    aris_time = ctx.get_aris_frametime(aris_idx)
+    
+    gopro_frame, _ = ctx.get_gopro_frame(aris_time)
+    
+    # Display side-by-side
+    cv2.imshow('ARIS', aris_frame)
+    if gopro_frame is not None:
+        cv2.imshow('GoPro', gopro_frame)
+    
+    key = cv2.waitKey(30)
+    if key == ord('q'):
+        break
+    elif key == ord('a'):  # Advance GoPro
+        ctx.gopro_offset += 1
+    elif key == ord('d'):  # Delay GoPro
+        ctx.gopro_offset -= 1
+    
+    aris_idx = (aris_idx + 1) % ctx.aris_frames_total
+```
+
+### Position-Based Analysis
+
+```python
+import matplotlib.pyplot as plt
+
+# Track object position over time
+positions = []
+for aris_idx in range(ctx.aris_start_frame, ctx.aris_end_frame):
+    aris_time = ctx.get_aris_frametime(aris_idx)
+    (x, y, z), _ = ctx.get_gantry_odom(aris_time)
+    positions.append((x, y, z))
+
+positions = np.array(positions)
+
+# Plot trajectory
+plt.figure(figsize=(10, 5))
+plt.subplot(1, 2, 1)
+plt.plot(positions[:, 0], positions[:, 1])
+plt.xlabel('X (m)')
+plt.ylabel('Y (m)')
+plt.title('XY Trajectory')
+
+plt.subplot(1, 2, 2)
+plt.plot(positions[:, 2])
+plt.xlabel('Frame')
+plt.ylabel('Z (m)')
+plt.title('Depth Profile')
+plt.show()
+```
+
+## Related Modules
+
+- [ARIS Definitions](/api/aris-definitions) - Frame header field definitions
+- [Optical Flow](/api/optical-flow) - Motion analysis on ARIS frames

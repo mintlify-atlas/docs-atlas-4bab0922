@@ -1,0 +1,170 @@
+---
+title: Processing Pipeline Overview
+description: Complete preprocessing pipeline for the UXO Dataset 2024
+---
+
+The UXO Dataset 2024 preprocessing pipeline transforms raw sensor recordings into a synchronized, ready-to-use research dataset. This multi-stage process handles ARIS sonar files, GoPro video footage, and ROS bag gantry trajectories.
+
+## Pipeline Architecture
+
+The preprocessing pipeline consists of 11 scripts that must be executed in filename order. All configuration is centralized in `config.yaml`.
+
+<Steps>
+  <Step title="ARIS Extraction">
+    Extract individual frames and metadata from proprietary .aris files
+    
+    - **prep_1_aris_extract.py**: Extracts frames as .pgm and metadata as .csv
+  </Step>
+  
+  <Step title="ARIS Transformation">
+    Convert raw sonar data to human-readable polar images
+    
+    - **prep_2_aris_to_polar.py**: Creates polar-transformed .png images
+    - **prep_3_aris_calc_optical_flow.py**: Calculates optical flow for motion detection
+    - **prep_4_aris_find_offsets.py**: GUI for marking motion onset/end
+  </Step>
+  
+  <Step title="Gantry Processing">
+    Extract trajectories from ROS bags
+    
+    - **prep_5_gantry_extract.py**: Extracts trajectories as .csv from ROS bags
+    - **prep_6_gantry_find_offsets.py**: Automatically detects motion onsets
+  </Step>
+  
+  <Step title="GoPro Processing">
+    Cut, downsample, and analyze video footage
+    
+    - **prep_7_gopro_cut.bash**: Cuts clips from raw footage using timestamps
+    - **prep_8_gopro_downsample.bash**: Re-encodes to multiple resolutions
+    - **prep_9_gopro_calc_optical_flow.py**: Calculates optical flow for matching
+  </Step>
+  
+  <Step title="Data Matching">
+    Synchronize all sensor modalities
+    
+    - **prep_x_match_recordings.py**: GUI for pairing and time offset adjustment
+  </Step>
+  
+  <Step title="Export">
+    Assemble final dataset
+    
+    - **release_1_export.py**: Exports synchronized dataset
+    - **release_2_archive.bash**: Creates distribution archives
+  </Step>
+</Steps>
+
+## Configuration: config.yaml
+
+All scripts read their settings from a centralized configuration file. This ensures consistency across the pipeline.
+
+<CodeGroup>
+```yaml config.yaml
+# ARIS Processing
+aris_input: "../data_raw/aris"
+aris_extract: "../data_processed/aris"
+aris_to_polar_method: "polar2"  # polar1, polar2, csv, or combine with +
+aris_to_polar_polar2_resolution: 1000  # pixels per meter
+aris_optical_flow_method: "lk"  # lk or farnerback
+
+# Gantry Processing
+gantry_input: "../data_raw/gantry"
+gantry_extract: "../data_processed/gantry"
+gantry_time_adjust: 2  # hours
+
+# GoPro Processing
+gopro_input: "../data_raw/gopro/"
+gopro_extract: "../data_processed/gopro"
+gopro_clip_resolution: "sd+fhd"  # uhd, fhd, sd (combine with +)
+gopro_optical_flow_method: "lk"
+
+# Export
+export_dir: "../data_export"
+export_gopro_resolution: "fhd"  # Only one resolution in final export
+export_gopro_format: "jpg"
+export_only_with_gopro: True  # Only export frames with GoPro overlap
+```
+</CodeGroup>
+
+## Key Design Decisions
+
+### ARIS as Ground Truth
+
+All preprocessing decisions were made based on and in favor of the ARIS data. The sonar provides the most reliable timestamps and serves as the reference for synchronization.
+
+### GoPro Synchronization Challenge
+
+The GoPro Hero 8 does not provide synchronized timestamps. The team used optical flow matching to align video footage with ARIS motion patterns. Timestamps were manually extracted from audio tracks where motor engagement was clearly visible.
+
+### Motion Onset Detection
+
+Optical flow calculation helps identify when actual motion begins in each recording. This is critical for:
+- Trimming recordings to relevant portions
+- Synchronizing sensor modalities
+- Matching GoPro clips to ARIS recordings
+
+## Execution Order
+
+Scripts must be run in this specific order:
+
+1. **prep_1_aris_extract.py** - Extract ARIS frames
+2. **prep_2_aris_to_polar.py** - Transform to polar coordinates
+3. **prep_3_aris_calc_optical_flow.py** - Calculate ARIS optical flow
+4. **prep_4_aris_find_offsets.py** - Mark ARIS motion boundaries (GUI)
+5. **prep_5_gantry_extract.py** - Extract gantry trajectories
+6. **prep_6_gantry_find_offsets.py** - Detect gantry motion onsets
+7. **prep_7_gopro_cut.bash** - Cut GoPro clips
+8. **prep_8_gopro_downsample.bash** - Downsample to target resolutions
+9. **prep_9_gopro_calc_optical_flow.py** - Calculate GoPro optical flow
+10. **prep_x_match_recordings.py** - Match and synchronize all data (GUI)
+11. **release_1_export.py** - Export final dataset
+12. **release_2_archive.bash** - Create distribution archives
+
+<Warning>
+Some scripts interact with ROS1. You may need Ubuntu 20.04 in Docker or [robostack](https://robostack.github.io/) for ROS environment setup.
+</Warning>
+
+## Performance Considerations
+
+- **ARIS polar transformation**: Can be slow for large datasets. Use `aris_to_polar_skip_existing: True` to resume interrupted runs.
+- **GoPro downsampling**: Processing 5.3K video at 60fps is extremely time-intensive. Downsampling cut clips is more efficient than downsampling full footage.
+- **Optical flow**: Both `lk` (Lucas-Kanade) and `farnerback` methods are supported. LK is generally faster for feature tracking.
+
+## Output Structure
+
+After preprocessing, data is organized as:
+
+```
+data_processed/
+├── aris/
+│   └── <recording_name>/
+│       ├── *.pgm              # Raw frames
+│       ├── polar/*.png        # Polar-transformed frames
+│       ├── *_frames.csv       # Frame metadata
+│       ├── *_metadata.yaml    # File metadata
+│       └── *_flow.csv         # Optical flow data
+├── gantry/
+│   ├── *.csv                  # Trajectory data
+│   └── gantry_metadata.csv    # Motion onset times
+├── gopro/
+│   ├── clips_sd/              # 640x360 clips
+│   ├── clips_fhd/             # 1920x1080 clips
+│   └── clips_uhd/             # 5312x2988 clips (original)
+└── matches.csv                # Sensor synchronization data
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="ARIS Extraction" icon="wave-pulse" href="./aris-extraction">
+    Learn about sonar data extraction and polar transformation
+  </Card>
+  <Card title="GoPro Processing" icon="video" href="./gopro-processing">
+    Understand video clip extraction and downsampling
+  </Card>
+  <Card title="Gantry Extraction" icon="route" href="./gantry-extraction">
+    Extract trajectories from ROS bags
+  </Card>
+  <Card title="Export" icon="box-archive" href="./export">
+    Assemble and package the final dataset
+  </Card>
+</CardGroup>

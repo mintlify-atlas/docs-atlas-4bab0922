@@ -1,0 +1,416 @@
+---
+title: GoPro Processing
+description: Extract, downsample, and analyze GoPro Hero 8 footage
+---
+
+GoPro Hero 8 footage provides optical context for sonar data but presents synchronization challenges. These scripts extract clips from continuous recordings, downsample to multiple resolutions, and calculate optical flow for motion matching.
+
+## Pipeline Stages
+
+GoPro processing consists of three scripts:
+
+1. **prep_7_gopro_cut.bash** - Extract clips from raw footage
+2. **prep_8_gopro_downsample.bash** - Re-encode to target resolutions
+3. **prep_9_gopro_calc_optical_flow.py** - Calculate optical flow
+
+## Synchronization Challenge
+
+The GoPro Hero 8 does not provide synchronized timestamps with the ARIS or gantry systems. To align footage:
+
+1. **Manual timestamp extraction**: Identify clip boundaries by finding motor engagement in audio tracks
+2. **Optical flow matching**: Compare GoPro motion patterns with ARIS optical flow
+3. **Manual offset adjustment**: Fine-tune synchronization in `prep_x_match_recordings.py`
+
+<Warning>
+GoPro footage was recorded at 5.3K resolution (5312×2988) at 60fps. Processing is **extremely time-intensive**. Budget accordingly for compute time.
+</Warning>
+
+## Step 1: Clip Extraction (prep_7_gopro_cut.bash)
+
+### Purpose
+
+Cuts the continuous GoPro recordings into individual clips corresponding to each trajectory. Uses manually extracted timestamps where motor engagement is visible in the audio track.
+
+### Timestamp Extraction Method
+
+Timestamps were determined by:
+1. Opening raw footage in video editor
+2. Examining audio waveform for motor engagement spikes
+3. Marking first frame with movement as clip start
+4. Marking last frame with movement as clip end
+5. Recording timestamps in MM:SS.mmm format
+
+### Configuration
+
+```yaml config.yaml
+gopro_input: "../data_raw/gopro/"        # Location of raw .mp4 files
+gopro_extract: "../data_processed/gopro" # Output directory
+```
+
+### Script Structure
+
+The bash script reads configuration from `config.yaml` and executes ffmpeg commands:
+
+```bash
+# Extract paths from config
+mydir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
+indir=$(sed -n -e 's/^gopro_input://p' "$mydir/config.yaml" | tr -d '"' | xargs)/uhd
+outdir=$(sed -n -e 's/^gopro_extract://p' "$mydir/config.yaml" | tr -d '"' | xargs)/clips_uhd
+
+# Copy codec (no re-encoding at this stage)
+options='-c copy -an'
+
+mkdir -p $outdir
+```
+
+### Example Clip Extraction
+
+```bash
+# Extract multiple clips from same source file
+ffmpeg -i "$indir/20230920_GX010010.mp4" -ss 03:37.940 -to 04:33.973 $options "$outdir/20230920_GX010010_01.mp4"
+ffmpeg -i "$indir/20230920_GX010010.mp4" -ss 17:18.361 -to 18:14.155 $options "$outdir/20230920_GX010010_02.mp4"
+ffmpeg -i "$indir/20230920_GX010010.mp4" -ss 20:59.888 -to 21:56.393 $options "$outdir/20230920_GX010010_03.mp4"
+```
+
+### Usage
+
+```bash
+bash scripts/prep_7_gopro_cut.bash
+```
+
+### Output
+
+```
+gopro_extract/
+└── clips_uhd/
+    ├── 20230920_GX010010_01.mp4  # First clip from file
+    ├── 20230920_GX010010_02.mp4  # Second clip from same file
+    ├── 20230920_GX020009_01.mp4  # Clip from different source
+    └── ...
+```
+
+### Clip Naming Convention
+
+```
+YYYYMMDD_GXNNNNNN_MM.mp4
+│        │         └─ Clip number from this source file
+│        └─────────── GoPro source file identifier
+└──────────────────── Recording date
+```
+
+<Note>
+The `-c copy` flag copies video without re-encoding, making this step fast despite large file sizes. Audio is stripped with `-an` as it's not needed for the dataset.
+</Note>
+
+## Step 2: Downsampling (prep_8_gopro_downsample.bash)
+
+### Purpose
+
+Re-encodes the UHD (5.3K) clips to lower resolutions for:
+- **Preview and matching** (SD: 640×360)
+- **Dataset export** (FHD: 1920×1080)
+- **Full resolution** (UHD: 5312×2988, optional)
+
+### Why Downsample Cut Clips?
+
+Downsampling cut clips is more efficient than downsampling full footage because:
+- Only relevant portions are processed
+- Can test different resolutions without re-cutting
+- Parallel processing is easier with smaller files
+
+### Resolution Options
+
+<Tabs>
+  <Tab title="sd (Standard Definition)">
+    **Resolution**: 640×360
+    
+    **Best for**:
+    - Quick preview of recordings
+    - Optical flow calculation (faster)
+    - Manual matching in GUI tools
+    
+    **FFmpeg options**:
+    ```bash
+    -vf scale=640:360 -c:v libx264 -an
+    ```
+  </Tab>
+  
+  <Tab title="fhd (Full HD)">
+    **Resolution**: 1920×1080
+    
+    **Best for**:
+    - Dataset export
+    - Publication figures
+    - Most research applications
+    
+    **FFmpeg options**:
+    ```bash
+    -vf scale=1920:1080 -c:v libx264 -an
+    ```
+  </Tab>
+  
+  <Tab title="uhd (Ultra HD)">
+    **Resolution**: 5312×2988 (original)
+    
+    **Best for**:
+    - Maximum detail preservation
+    - Specialized analysis requiring full resolution
+    
+    <Warning>
+    UHD files are extremely large and slow to process. Only use if absolutely necessary.
+    </Warning>
+  </Tab>
+</Tabs>
+
+### Configuration
+
+```yaml config.yaml
+gopro_clip_resolution: "sd+fhd"  # Combine multiple resolutions with +
+```
+
+This generates both SD and FHD versions of each clip.
+
+### Script Structure
+
+```bash
+gopro_clips=$(sed -n -e 's/^gopro_extract://p' "$mydir/config.yaml" | tr -d '"' | xargs)
+resolutions=$(sed -n -e 's/^gopro_clip_resolution://p' "$mydir/config.yaml" | tr -d '"' | xargs)
+indir="$gopro_clips/clips_uhd"
+
+export IFS="+"
+for res in $resolutions; do
+    case "$res" in
+    "uhd" | "copy")
+        continue  # UHD already exists, skip
+        ;;
+    "fhd")
+        options='-vf scale=1920:1080 -c:v libx264 -an'
+        ;;
+    "sd")
+        options='-vf scale=640:360 -c:v libx264 -an'
+        ;;
+    esac
+    
+    outdir="$gopro_clips/clips_$res"
+    mkdir -p "$outdir"
+    
+    for file in "$indir"/*.mp4; do
+        ffmpeg -loglevel error -stats -i "$file" $options "$outdir"/$(basename $file .mp4).mp4
+    done
+done
+```
+
+### Usage
+
+```bash
+bash scripts/prep_8_gopro_downsample.bash
+```
+
+<Note>
+This script processes all clips sequentially. For faster processing, consider running multiple ffmpeg instances in parallel manually.
+</Note>
+
+### Output
+
+```
+gopro_extract/
+├── clips_uhd/    # Original 5.3K clips (from prep_7)
+├── clips_fhd/    # 1920×1080 versions
+│   ├── 20230920_GX010010_01.mp4
+│   └── ...
+└── clips_sd/     # 640×360 versions
+    ├── 20230920_GX010010_01.mp4
+    └── ...
+```
+
+## Step 3: Optical Flow Calculation (prep_9_gopro_calc_optical_flow.py)
+
+### Purpose
+
+Calculates optical flow magnitudes for each GoPro clip. This enables motion-based matching with ARIS recordings, which is essential since the GoPro lacks synchronized timestamps.
+
+### Optical Flow Methods
+
+<CodeGroup>
+```yaml Lucas-Kanade (lk)
+gopro_optical_flow_method: "lk"
+
+# Optimized parameters for GoPro footage:
+# - winSize: (10, 10) - larger than ARIS due to higher resolution
+# - maxLevel: 1 - fewer pyramid levels (footage is smoother)
+# - maxCorners: 30
+# - qualityLevel: 0.3
+# - minDistance: 10 pixels
+```
+
+```yaml Farneback
+gopro_optical_flow_method: "farnerback"
+
+# Parameters:
+# - pyr_scale: 0.5
+# - levels: 3
+# - winsize: 15
+# - poly_n: 5
+# - poly_sigma: 1.2
+```
+</CodeGroup>
+
+### Configuration
+
+```yaml config.yaml
+gopro_optical_flow_method: "lk"      # lk or farnerback
+gopro_optical_flow_recalc: True      # Recalculate existing flow files
+gopro_clip_resolution: "sd+fhd"      # Calculate for all resolutions
+```
+
+### Usage
+
+```bash
+python scripts/prep_9_gopro_calc_optical_flow.py
+```
+
+The script processes all resolutions specified in `gopro_clip_resolution`.
+
+### Implementation Details
+
+The script uses OpenCV's `VideoCapture` to iterate through frames:
+
+```python
+class GoproIterator:
+    def __init__(self, video) -> None:
+        self._clip = cv2.VideoCapture(video)
+        self._num_frames = int(self._clip.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    def __iter__(self):
+        for idx in trange(len(self)):
+            self._clip.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            has_frame, frame = self._clip.read()
+            if not has_frame:
+                break
+            yield cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+```
+
+Frames are converted to grayscale before optical flow calculation.
+
+### Output
+
+```
+gopro_extract/
+├── clips_fhd/
+│   ├── 20230920_GX010010_01.mp4
+│   ├── 20230920_GX010010_01_flow.csv  # Flow data for this clip
+│   └── ...
+└── clips_sd/
+    ├── 20230920_GX010010_01.mp4
+    ├── 20230920_GX010010_01_flow.csv
+    └── ...
+```
+
+Each `*_flow.csv` contains one row per frame with the optical flow magnitude.
+
+## Matching Workflow
+
+After all preprocessing, match GoPro clips to ARIS recordings:
+
+<Steps>
+  <Step title="Run prep_x_match_recordings.py">
+    Launch the GUI matching tool:
+    ```bash
+    python scripts/prep_x_match_recordings.py
+    ```
+  </Step>
+  
+  <Step title="Compare optical flow patterns">
+    The tool displays:
+    - ARIS optical flow over time
+    - GoPro optical flow over time
+    - Current frame from both sensors
+  </Step>
+  
+  <Step title="Identify matching motion">
+    Look for similar patterns in the flow curves. The motion profile should be recognizable despite different absolute magnitudes.
+  </Step>
+  
+  <Step title="Adjust time offset">
+    Fine-tune the temporal offset until frames are synchronized. The tool shows overlaid frames to verify alignment.
+  </Step>
+  
+  <Step title="Save matches">
+    Pairs and offsets are saved to:
+    ```yaml
+    match_file: "../data_processed/matches.csv"
+    ```
+  </Step>
+</Steps>
+
+## Performance Tips
+
+<AccordionGroup>
+  <Accordion title="Cutting is slow">
+    Cutting with `-c copy` should be fast (no re-encoding). If slow:
+    - Check disk I/O (slow external drive?)
+    - Verify you're using `-c copy`, not re-encoding
+    - Process files in parallel manually
+  </Accordion>
+  
+  <Accordion title="Downsampling takes forever">
+    5.3K to FHD re-encoding is CPU-intensive. To speed up:
+    - Use hardware acceleration: `-c:v h264_nvenc` (NVIDIA) or `-c:v h264_videotoolbox` (Mac)
+    - Process clips in parallel across multiple machines
+    - Only generate SD for matching, skip FHD until export
+  </Accordion>
+  
+  <Accordion title="Optical flow calculation fails">
+    Ensure:
+    - Video files are not corrupt
+    - OpenCV can read the codec (H.264 should work)
+    - Sufficient disk space for CSV output
+    - RAM available for video decoding
+  </Accordion>
+</AccordionGroup>
+
+## Export Configuration
+
+When exporting the final dataset, only one GoPro resolution is included:
+
+```yaml config.yaml
+export_gopro_resolution: "fhd"   # Only one resolution in export
+export_gopro_format: "jpg"       # Individual frames extracted as JPEG
+export_only_with_gopro: True     # Only export ARIS frames with GoPro overlap
+```
+
+See the [Export](./export) page for details on final dataset assembly.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="FFmpeg not found">
+    Install ffmpeg:
+    ```bash
+    # Ubuntu/Debian
+    sudo apt install ffmpeg
+    
+    # macOS
+    brew install ffmpeg
+    ```
+  </Accordion>
+  
+  <Accordion title="Audio extraction failed">
+    These scripts use `-an` (no audio) in all commands. If you need audio for timestamp extraction, remove the `-an` flag.
+  </Accordion>
+  
+  <Accordion title="Clips don't match trajectories">
+    Double-check timestamps in `prep_7_gopro_cut.bash`. Times should match visible motor engagement in audio waveform.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Gantry Extraction" icon="route" href="./gantry-extraction">
+    Extract trajectory data to complete the sensor suite
+  </Card>
+  <Card title="Export" icon="box-archive" href="./export">
+    Assemble synchronized data for final dataset
+  </Card>
+</CardGroup>

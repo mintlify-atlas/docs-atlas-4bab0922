@@ -1,0 +1,136 @@
+---
+title: Accessing the Dataset
+description: Download and understand the UXO Dataset 2024 from Zenodo
+---
+
+The UXO Dataset 2024 is publicly available on Zenodo, providing multimodal synchronized data for acoustic and optical sensing of unexploded ordnance (UXO) underwater.
+
+## Dataset Overview
+
+This dataset contains close to 100 trajectories and over 74,000 frames of 3 distinct types of UXO recorded in a controlled environment. It includes:
+
+- **Sonar scans** using an ARIS Explorer 3000 imaging sonar
+- **Matched GoPro UHD frames** for most sonar frames
+- **Labeled camera frames** with bounding box annotations
+- **Accurate transforms** between sonar and targets
+- **3D models** of UXO targets with known dimensions and munition types
+- **Realistic trajectories** achievable in non-experimental environments
+- **Calibration matrices** and metadata
+
+<Note>
+The dataset was recorded using an ARIS 3000 imaging sonar, a GoPro Hero 8, and a custom-designed gantry crane system.
+</Note>
+
+## Downloading from Zenodo
+
+The complete dataset is hosted on Zenodo and can be accessed directly:
+
+<Card title="Download Dataset" icon="download" href="https://zenodo.org/records/13778485">
+  Access the full UXO Dataset 2024 on Zenodo
+</Card>
+
+### Download Requirements
+
+<Warning>
+The dataset is substantial in size. Ensure you have sufficient storage space and a stable internet connection before downloading.
+</Warning>
+
+Before downloading, make sure you have:
+
+- Adequate disk space for the complete dataset
+- A reliable internet connection (recommended for large file downloads)
+- A tool for extracting compressed archives (if the dataset is provided in archive format)
+
+### What's Included
+
+The exported dataset uses simple, well-established formats for maximum compatibility:
+
+<CardGroup cols={2}>
+  <Card title="Image Data" icon="image">
+    - `.pgm` files for raw sonar frames
+    - `.png` files for polar-transformed sonar images
+    - `.jpg` files for camera frames
+  </Card>
+  <Card title="Metadata" icon="table">
+    - `.csv` files for trajectories and frame metadata
+    - `.yaml` files for configuration and calibration
+    - `.json` files for structured data
+    - `.txt` files for notes and documentation
+  </Card>
+</CardGroup>
+
+## Dataset Structure
+
+After downloading and extracting, the dataset is organized by target type and recording:
+
+```
+data_export/
+└── recordings/
+    └── <target_type>/
+        └── <recording_folder>/
+            ├── aris_raw/          # Raw sonar frames (.pgm)
+            ├── aris_polar/        # Polar-transformed sonar (.png)
+            ├── gopro/             # Camera frames (.jpg)
+            ├── gantry.csv         # Trajectory data
+            ├── aris_frame_meta.csv   # Frame-level metadata
+            ├── aris_file_meta.yaml   # Recording-level metadata
+            └── notes.txt          # Recording notes
+```
+
+### File Formats Explained
+
+<AccordionGroup>
+  <Accordion title="Sonar Data">
+    - **aris_raw/**: Raw sonar frames in PGM format as captured by the ARIS 3000
+    - **aris_polar/**: Polar-transformed PNG images representing what the sonar was actually "seeing"
+    - **aris_frame_meta.csv**: Frame-by-frame metadata including timestamps and sonar parameters
+    - **aris_file_meta.yaml**: Recording-level configuration and settings
+  </Accordion>
+  
+  <Accordion title="Camera Data">
+    - **gopro/**: Individual JPEG frames extracted from GoPro Hero 8 footage
+    - GoPro frames are synchronized with sonar data
+    - Label coordinates should be multiplied by 3 for correct scaling
+  </Accordion>
+  
+  <Accordion title="Position Data">
+    - **gantry.csv**: Contains the gantry crane trajectory and target poses
+    - Indexed by ARIS frame index for easy synchronization
+    - Includes accurate transforms between sonar and targets
+  </Accordion>
+</AccordionGroup>
+
+## Citation
+
+When using this dataset, please cite the following paper:
+
+```bibtex
+@INPROCEEDINGS{dahn2024uxo,
+  author={Dahn, Nikolas and Firvida, Miguel Bande and Sharma, Proneet and 
+          Christensen, Leif and Geisle, Oliver and Mohrmann, Jochen and 
+          Frey, Torsten and Kumar Sanghamreddy, Prithvi and Kirchner, Frank},
+  title={An Acoustic and Optical Dataset for the Perception of Underwater 
+         Unexploded Ordnance (UXO)}, 
+  booktitle={OCEANS 2024 - Halifax}, 
+  year={2024},
+  doi={10.1109/OCEANS55160.2024.10754316}
+}
+```
+
+## Additional Resources
+
+- **Research Paper**: [ResearchGate](https://www.researchgate.net/publication/386124306_An_Acoustic_and_Optical_Dataset_for_the_Perception_of_Underwater_Unexploded_Ordnance_UXO)
+- **Processing Scripts**: [GitHub Repository](https://github.com/dfki-ric/uxo-dataset2024)
+
+## Next Steps
+
+After downloading the dataset:
+
+<CardGroup cols={2}>
+  <Card title="Install Dependencies" icon="download" href="/getting-started/installation">
+    Set up the required Python environment
+  </Card>
+  <Card title="View the Data" icon="eye" href="/getting-started/viewing-data">
+    Learn how to visualize and explore the dataset
+  </Card>
+</CardGroup>

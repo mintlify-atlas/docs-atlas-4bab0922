@@ -1,0 +1,312 @@
+---
+title: "ARIS Definitions"
+description: "Constants and type definitions for ARIS sonar file format"
+---
+
+## Overview
+
+The `aris_definitions` module provides essential constants, enumerations, and helper functions for working with ARIS sonar data files. It defines the binary structure of ARIS file and frame headers, beam angle configurations, and utility functions for interpreting sonar parameters.
+
+**Module Path:** `scripts/common/aris_definitions.py`
+
+## Header Format Definitions
+
+### File Header
+
+The file header structure is defined using Python's `struct` format string:
+
+```python
+FileHeaderDefinition = '< IIIII f II ff II 32s 256s iiii IIIIIIIIIIIIIIIIII QQQ II 568x'
+```
+
+This defines a little-endian (`<`) packed binary structure containing version information, frame counts, sample rates, and recording parameters. The structure includes 568 bytes of padding at the end.
+
+### Frame Header
+
+The frame header structure contains metadata for each individual sonar frame:
+
+```python
+FrameHeaderDefinition = '< I Q II Q IIIIII ff I i IIIIII ffffffffffffffffffff dd f I fff IIII f I fffffffff d f III fff IIIIIII ffffff 16f ffff IIIIII ff IIIIII Q IIIIII ffff IIIIIIIIIIIIIIIII fff III ffffffffffff IIIIII HH Q fff II 288x'
+```
+
+This structure includes timestamp information, sensor readings (temperature, humidity, battery), positioning data (GPS, compass, depth), and system status flags. It ends with 288 bytes of padding.
+
+## Enumerations
+
+### FileHeaderFields
+
+Enum defining all fields available in the ARIS file header.
+
+```python
+class FileHeaderFields(str, Enum):
+    version = "Version"
+    frame_count = "FrameCount"
+    frame_rate = "FrameRate"
+    high_resolution = "HighResolution"
+    num_raw_beams = "NumRawBeams"
+    # ... additional fields
+```
+
+<Accordion title="All FileHeaderFields Values">
+
+<ParamField path="version" type="str">
+  File format version number
+</ParamField>
+
+<ParamField path="frame_count" type="str">
+  Total number of frames in the file
+</ParamField>
+
+<ParamField path="frame_rate" type="str">
+  Recording frame rate in frames per second
+</ParamField>
+
+<ParamField path="high_resolution" type="str">
+  High resolution mode flag
+</ParamField>
+
+<ParamField path="num_raw_beams" type="str">
+  Number of acoustic beams
+</ParamField>
+
+<ParamField path="sample_rate" type="str">
+  Sample rate in Hz
+</ParamField>
+
+<ParamField path="samples_per_channel" type="str">
+  Number of samples per channel
+</ParamField>
+
+<ParamField path="receiver_gain" type="str">
+  Receiver gain setting
+</ParamField>
+
+<ParamField path="window_start" type="str">
+  Start of acquisition window
+</ParamField>
+
+<ParamField path="window_length" type="str">
+  Length of acquisition window
+</ParamField>
+
+<ParamField path="reverse" type="str">
+  Reverse orientation flag
+</ParamField>
+
+<ParamField path="sn" type="str">
+  Serial number
+</ParamField>
+
+<ParamField path="str_date" type="str">
+  Recording date string
+</ParamField>
+
+<ParamField path="str_header_id" type="str">
+  Header identifier string
+</ParamField>
+
+<ParamField path="water_temp" type="str">
+  Water temperature in Celsius
+</ParamField>
+
+<ParamField path="salinity" type="str">
+  Water salinity
+</ParamField>
+
+<ParamField path="pulse_length" type="str">
+  Acoustic pulse length
+</ParamField>
+
+<ParamField path="file_size" type="str">
+  Total file size in bytes
+</ParamField>
+
+</Accordion>
+
+### FrameHeaderFields
+
+Enum defining all fields available in each ARIS frame header.
+
+```python
+class FrameHeaderFields(str, Enum):
+    frame_index = "FrameIndex"
+    frame_time = "FrameTime"
+    version = "Version"
+    status = "Status"
+    # ... additional fields
+```
+
+<Accordion title="Key FrameHeaderFields Values">
+
+<ParamField path="frame_index" type="str">
+  Sequential frame number
+</ParamField>
+
+<ParamField path="frame_time" type="str">
+  Frame timestamp in microseconds since epoch (PC time)
+</ParamField>
+
+<ParamField path="sonar_time_stamp" type="str">
+  Frame timestamp in microseconds since epoch (sonar time)
+</ParamField>
+
+<ParamField path="ping_mode" type="str">
+  Ping mode identifier (determines beam count)
+</ParamField>
+
+<ParamField path="sample_rate" type="str">
+  Sample rate for this frame
+</ParamField>
+
+<ParamField path="samples_per_beam" type="str">
+  Number of samples per acoustic beam
+</ParamField>
+
+<ParamField path="sound_speed" type="str">
+  Speed of sound in water (m/s)
+</ParamField>
+
+<ParamField path="latitude" type="str">
+  GPS latitude
+</ParamField>
+
+<ParamField path="longitude" type="str">
+  GPS longitude
+</ParamField>
+
+<ParamField path="depth" type="str">
+  Water depth
+</ParamField>
+
+<ParamField path="altitude" type="str">
+  Sonar altitude above bottom
+</ParamField>
+
+<ParamField path="pitch" type="str">
+  Sonar pitch angle
+</ParamField>
+
+<ParamField path="roll" type="str">
+  Sonar roll angle
+</ParamField>
+
+<ParamField path="heading" type="str">
+  Sonar heading angle
+</ParamField>
+
+<ParamField path="water_temp" type="str">
+  Water temperature in Celsius
+</ParamField>
+
+<ParamField path="salinity" type="str">
+  Water salinity
+</ParamField>
+
+<ParamField path="battery_voltage" type="str">
+  Battery voltage level
+</ParamField>
+
+</Accordion>
+
+## Functions
+
+### get_beamcount_from_pingmode
+
+Determines the number of acoustic beams based on the ping mode setting.
+
+```python
+def get_beamcount_from_pingmode(pingmode: int) -> int
+```
+
+<ParamField path="pingmode" type="int" required>
+  The ping mode identifier from the frame header
+</ParamField>
+
+<ResponseField name="beam_count" type="int">
+  Number of beams for the given ping mode:
+  - Modes 1-2: 48 beams
+  - Modes 3-5: 96 beams
+  - Modes 6-8: 64 beams
+  - Modes 9-12: 128 beams
+  - Unknown modes: 0
+</ResponseField>
+
+#### Example
+
+```python
+from scripts.common.aris_definitions import get_beamcount_from_pingmode
+
+# Get beam count for ping mode 10
+beam_count = get_beamcount_from_pingmode(10)
+print(f"Ping mode 10 uses {beam_count} beams")  # Output: 128 beams
+```
+
+## Beam Angle Definitions
+
+### BeamWidthsAris3000_64
+
+Defines the angular coverage for 64-beam ARIS 3000 configuration. Each entry is a tuple of `(center_angle, left_angle, right_angle)` in degrees.
+
+```python
+BeamWidthsAris3000_64 = [
+    (-14.8872, -15.1175, -14.6569),
+    (-14.4266, -14.6569, -14.1952),
+    # ... 64 total beams
+    (14.8872, 14.6569, 15.1175),
+]
+```
+
+**Total Coverage:** Approximately -15° to +15° (30° total field of view)
+
+### BeamWidthsAris3000_128
+
+Defines the angular coverage for 128-beam ARIS 3000 configuration. Each entry is a tuple of `(center_angle, left_angle, right_angle)` in degrees.
+
+```python
+BeamWidthsAris3000_128 = [
+    (-15.0068, -15.1218, -14.8918),
+    (-14.7768, -14.8918, -14.6615),
+    # ... 128 total beams
+    (15.0156, 14.9003, 15.1306),
+]
+```
+
+**Total Coverage:** Approximately -15° to +15° (30° total field of view with finer resolution)
+
+## Usage Example
+
+```python
+import struct
+from scripts.common.aris_definitions import (
+    FileHeaderDefinition,
+    FrameHeaderDefinition,
+    FileHeaderFields,
+    FrameHeaderFields,
+    get_beamcount_from_pingmode,
+    BeamWidthsAris3000_128
+)
+
+# Parse file header
+with open('recording.aris', 'rb') as f:
+    header_bytes = f.read(struct.calcsize(FileHeaderDefinition))
+    header_data = struct.unpack(FileHeaderDefinition, header_bytes)
+    
+    # Access specific fields
+    version_idx = list(FileHeaderFields).index(FileHeaderFields.version)
+    version = header_data[version_idx]
+    
+# Determine beam configuration
+ping_mode = 10  # from frame header
+beam_count = get_beamcount_from_pingmode(ping_mode)
+print(f"Using {beam_count} beams")
+
+# Get beam angles for 128-beam configuration
+if beam_count == 128:
+    for i, (center, left, right) in enumerate(BeamWidthsAris3000_128):
+        print(f"Beam {i}: {center:.2f}° (±{(right-left)/2:.2f}°)")
+```
+
+## Related Modules
+
+- [Matching Context](/api/matching-context) - Uses ARIS metadata for synchronization
+- [Optical Flow](/api/optical-flow) - Processes ARIS frames for motion detection

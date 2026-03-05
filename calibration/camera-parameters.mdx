@@ -1,0 +1,329 @@
+---
+title: 'Camera Parameters'
+description: 'GoPro intrinsic calibration parameters for different field of view modes'
+---
+
+## Overview
+
+The GoPro camera used in the UXO Dataset 2024 was calibrated for four different field of view (FOV) modes. Each mode has distinct intrinsic parameters including the camera matrix and distortion coefficients.
+
+All calibration files are stored in `/calibration/camera_parameters/` and follow OpenCV's camera calibration model.
+
+## GoPro Field of View Modes
+
+The GoPro supports multiple FOV modes that affect the lens distortion and field of view:
+
+<CardGroup cols={2}>
+  <Card title="Linear" icon="ruler">
+    Digitally corrected mode with minimal distortion. Best for photogrammetry and measurement applications.
+  </Card>
+  <Card title="Narrow" icon="compress">
+    Telephoto mode with reduced field of view and less distortion than wide modes.
+  </Card>
+  <Card title="Wide" icon="expand">
+    Standard wide-angle mode with moderate barrel distortion. Balances FOV and distortion.
+  </Card>
+  <Card title="SuperView" icon="panorama">
+    Maximum field of view with dynamic stretching. Highest distortion levels.
+  </Card>
+</CardGroup>
+
+## Camera Calibration Parameters
+
+Each FOV mode has calibrated intrinsic parameters stored as NumPy arrays in text format.
+
+### Camera Matrix
+
+The camera matrix (K) contains the focal lengths and principal point:
+
+```
+[[fx,  0, cx],
+ [ 0, fy, cy],
+ [ 0,  0,  1]]
+```
+
+Where:
+- `fx`, `fy`: Focal lengths in pixels (x and y directions)
+- `cx`, `cy`: Principal point coordinates (optical center)
+
+### Distortion Coefficients
+
+The distortion vector contains four coefficients for the fisheye distortion model:
+
+```
+[k1, k2, k3, k4]
+```
+
+These coefficients model radial distortion characteristic of wide-angle lenses.
+
+## Linear Mode
+
+<ParamField path="camera_parameter_linear.txt" type="calibration">
+  Digitally corrected linear mode with minimal distortion.
+</ParamField>
+
+```python camera_parameter_linear.txt
+camera_matrix =  [[1.47304513e+03 0.00000000e+00 9.69389055e+02]
+ [0.00000000e+00 1.47833421e+03 5.40775107e+02]
+ [0.00000000e+00 0.00000000e+00 1.00000000e+00]]
+distortion =  [[ 0.90938145]
+ [ 0.09319444]
+ [ 7.88195247]
+ [-3.68132837]]
+```
+
+<Accordion title="Parameter Breakdown">
+  - **fx**: 1473.0 pixels
+  - **fy**: 1478.3 pixels
+  - **cx**: 969.4 pixels
+  - **cy**: 540.8 pixels
+  - **k1**: 0.909 (positive radial distortion)
+  - **k2**: 0.093
+  - **k3**: 7.882
+  - **k4**: -3.681 (negative correction)
+</Accordion>
+
+## Narrow Mode
+
+<ParamField path="camera_parameter_narrow.txt" type="calibration">
+  Telephoto mode with reduced field of view.
+</ParamField>
+
+```python camera_parameter_narrow.txt
+camera_matrix =  [[1.96032520e+03 0.00000000e+00 9.61545001e+02]
+ [0.00000000e+00 1.96508356e+03 5.44228971e+02]
+ [0.00000000e+00 0.00000000e+00 1.00000000e+00]]
+distortion =  [[  0.86674484]
+ [ -0.03704667]
+ [  8.587814  ]
+ [-18.75784521]]
+```
+
+<Accordion title="Parameter Breakdown">
+  - **fx**: 1960.3 pixels (higher focal length = narrower FOV)
+  - **fy**: 1965.1 pixels
+  - **cx**: 961.5 pixels
+  - **cy**: 544.2 pixels
+  - **k1**: 0.867
+  - **k2**: -0.037 (slight negative distortion)
+  - **k3**: 8.588
+  - **k4**: -18.758 (strong negative correction)
+</Accordion>
+
+## Wide Mode
+
+<ParamField path="camera_parameter_wide.txt" type="calibration">
+  Standard wide-angle mode with moderate distortion.
+</ParamField>
+
+```python camera_parameter_wide.txt
+camera_matrix =  [[1.31243683e+03 0.00000000e+00 9.80421992e+02]
+ [0.00000000e+00 1.31261251e+03 5.31336901e+02]
+ [0.00000000e+00 0.00000000e+00 1.00000000e+00]]
+distortion =  [[ 0.14790296]
+ [ 1.18643565]
+ [-3.77146525]
+ [ 5.44358806]]
+```
+
+<Accordion title="Parameter Breakdown">
+  - **fx**: 1312.4 pixels (lower focal length = wider FOV)
+  - **fy**: 1312.6 pixels
+  - **cx**: 980.4 pixels
+  - **cy**: 531.3 pixels
+  - **k1**: 0.148
+  - **k2**: 1.186
+  - **k3**: -3.771 (negative distortion)
+  - **k4**: 5.444
+</Accordion>
+
+## SuperView Mode
+
+<ParamField path="camera_parameter_superview.txt" type="calibration">
+  Maximum field of view with dynamic stretching and highest distortion.
+</ParamField>
+
+```python camera_parameter_superview.txt
+camera_matrix =  [[1.37477315e+03 0.00000000e+00 9.65037288e+02]
+ [0.00000000e+00 1.25389393e+03 3.46383440e+02]
+ [0.00000000e+00 0.00000000e+00 1.00000000e+00]]
+distortion =  [[  0.43139299]
+ [  1.46997173]
+ [-22.94272641]
+ [ 62.08773762]]
+```
+
+<Accordion title="Parameter Breakdown">
+  - **fx**: 1374.8 pixels
+  - **fy**: 1253.9 pixels (asymmetric due to dynamic stretching)
+  - **cx**: 965.0 pixels
+  - **cy**: 346.4 pixels (shifted principal point)
+  - **k1**: 0.431
+  - **k2**: 1.470
+  - **k3**: -22.943 (very strong negative distortion)
+  - **k4**: 62.088 (very strong positive correction)
+</Accordion>
+
+<Warning>
+  SuperView mode has significant distortion (k3 = -22.94, k4 = 62.09) and asymmetric focal lengths. Use with caution for measurement applications.
+</Warning>
+
+## Using Camera Parameters
+
+### Loading Parameters in Python
+
+```python
+import numpy as np
+import re
+
+def load_camera_params(filename):
+    """Load camera matrix and distortion from calibration file."""
+    with open(filename, 'r') as f:
+        content = f.read()
+    
+    # Extract camera matrix
+    camera_match = re.search(r'camera_matrix = \s*\[(.*?)\]', content, re.DOTALL)
+    camera_str = camera_match.group(1).replace('[', '').replace(']', '')
+    camera_matrix = np.fromstring(camera_str, sep=' ').reshape(3, 3)
+    
+    # Extract distortion
+    dist_match = re.search(r'distortion = \s*\[(.*?)\]', content, re.DOTALL)
+    dist_str = dist_match.group(1).replace('[', '').replace(']', '')
+    distortion = np.fromstring(dist_str, sep=' ')
+    
+    return camera_matrix, distortion
+
+# Load calibration for wide mode
+K, D = load_camera_params('calibration/camera_parameters/camera_parameter_wide.txt')
+```
+
+### Undistorting Images with OpenCV
+
+```python
+import cv2
+import numpy as np
+
+# Load calibration
+K, D = load_camera_params('calibration/camera_parameters/camera_parameter_wide.txt')
+
+# Load image
+img = cv2.imread('gopro_image.jpg')
+h, w = img.shape[:2]
+
+# Compute optimal camera matrix
+balance = 0.0  # 0.0 = all pixels valid, 1.0 = all source pixels visible
+new_K = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(
+    K, D, (w, h), np.eye(3), balance=balance)
+
+# Undistort image
+map1, map2 = cv2.fisheye.initUndistortRectifyMap(
+    K, D, np.eye(3), new_K, (w, h), cv2.CV_16SC2)
+undistorted = cv2.remap(img, map1, map2, cv2.INTER_LINEAR)
+```
+
+### Projecting 3D Points to Image
+
+```python
+import cv2
+import numpy as np
+
+# 3D point in camera frame (meters)
+point_3d = np.array([[0.5, 0.3, 2.0]])  # X, Y, Z
+
+# Load calibration
+K, D = load_camera_params('calibration/camera_parameters/camera_parameter_wide.txt')
+
+# Project to image using fisheye model
+rvec = np.zeros(3)  # No rotation (already in camera frame)
+tvec = np.zeros(3)  # No translation
+
+image_points, _ = cv2.fisheye.projectPoints(
+    point_3d.reshape(-1, 1, 3), rvec, tvec, K, D)
+
+print(f"Image coordinates: {image_points[0][0]}")
+```
+
+## FOV Mode Comparison
+
+<Tabs>
+  <Tab title="Focal Length">
+    | Mode | fx (pixels) | fy (pixels) | FOV |
+    |------|-------------|-------------|-----|
+    | **Narrow** | 1960.3 | 1965.1 | Narrowest |
+    | **Linear** | 1473.0 | 1478.3 | Medium-narrow |
+    | **SuperView** | 1374.8 | 1253.9 | Medium-wide |
+    | **Wide** | 1312.4 | 1312.6 | Widest |
+    
+    Lower focal length = wider field of view.
+  </Tab>
+  <Tab title="Distortion">
+    | Mode | k1 | k2 | k3 | k4 | Severity |
+    |------|-----|-----|------|------|----------|
+    | **Wide** | 0.15 | 1.19 | -3.77 | 5.44 | Low |
+    | **Linear** | 0.91 | 0.09 | 7.88 | -3.68 | Low |
+    | **Narrow** | 0.87 | -0.04 | 8.59 | -18.76 | Medium |
+    | **SuperView** | 0.43 | 1.47 | -22.94 | 62.09 | High |
+    
+    SuperView has extreme distortion coefficients requiring careful correction.
+  </Tab>
+  <Tab title="Principal Point">
+    | Mode | cx (pixels) | cy (pixels) | Offset |
+    |------|-------------|-------------|---------|
+    | **Linear** | 969.4 | 540.8 | Centered |
+    | **Narrow** | 961.5 | 544.2 | Centered |
+    | **Wide** | 980.4 | 531.3 | Centered |
+    | **SuperView** | 965.0 | 346.4 | Shifted up |
+    
+    SuperView has a significantly shifted principal point (cy = 346 vs ~540 for others).
+  </Tab>
+</Tabs>
+
+## Calibration Model
+
+The parameters use OpenCV's **fisheye camera model**, which is specifically designed for wide-angle and fisheye lenses:
+
+```python
+# Fisheye distortion formula
+r = sqrt(x² + y²)
+θ = atan(r)
+θ_d = θ(1 + k1*θ² + k2*θ⁴ + k3*θ⁶ + k4*θ⁸)
+x' = (θ_d / r) * x
+y' = (θ_d / r) * y
+```
+
+<Note>
+  This is different from the standard pinhole distortion model. Use `cv2.fisheye.*` functions in OpenCV, not the regular `cv2.undistort()`.
+</Note>
+
+## File Locations
+
+All camera parameter files are located in:
+```
+/calibration/camera_parameters/
+├── camera_parameter_linear.txt
+├── camera_parameter_narrow.txt
+├── camera_parameter_wide.txt
+└── camera_parameter_superview.txt
+```
+
+## Recommendations
+
+<AccordionGroup>
+  <Accordion title="For Computer Vision Tasks">
+    Use **Linear** or **Wide** mode:
+    - Linear: Best for undistorted viewing and measurement
+    - Wide: Good balance of FOV and manageable distortion
+  </Accordion>
+  
+  <Accordion title="For Maximum Coverage">
+    Use **Wide** mode rather than SuperView:
+    - SuperView's extreme distortion can cause artifacts
+    - Wide mode provides excellent coverage with moderate distortion
+  </Accordion>
+  
+  <Accordion title="For Long-Range Imaging">
+    Use **Narrow** mode:
+    - Higher focal length provides better resolution at distance
+    - Lower distortion than wide modes
+  </Accordion>
+</AccordionGroup>

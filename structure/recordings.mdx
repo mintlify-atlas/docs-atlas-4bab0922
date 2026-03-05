@@ -1,0 +1,481 @@
+---
+title: Recording Structure
+description: Organization and contents of individual recording folders
+---
+
+Each recording in the UXO Dataset 2024 represents a single trajectory of the sonar system observing a UXO target. All data within a recording is synchronized to the ARIS sonar frame timestamps.
+
+## Recording Organization
+
+Recordings are organized by target type in the `recordings/` directory:
+
+```
+recordings/
+├── 100lbs/
+│   ├── recording_001/
+│   ├── recording_002/
+│   └── ...
+├── mortar_shell/
+│   └── ...
+├── incendiary/
+├── cylinder/
+└── 100lbs_floor/
+```
+
+## Recording Folder Contents
+
+Each recording folder contains synchronized multimodal sensor data:
+
+```
+recording_001/
+├── aris_raw/          # Raw ARIS sonar frames (.pgm)
+├── aris_polar/        # Polar-transformed ARIS frames (.png)
+├── gopro/             # Synchronized camera frames (.jpg)
+├── aris_frame_meta.csv   # Per-frame ARIS metadata
+├── aris_file_meta.yaml   # Recording-level ARIS metadata
+├── gantry.csv         # Gantry crane positions
+├── ar3.csv            # AR3 robot arm poses
+└── notes.txt          # Recording notes and metadata
+```
+
+## Directory Details
+
+### aris_raw/
+
+Raw ARIS sonar frames in PGM format.
+
+**Contents**: Grayscale images representing raw beam intensities
+
+**Naming**: `NNNN.pgm` where NNNN is the 4-digit zero-padded ARIS frame index
+
+**Example**:
+```
+aris_raw/
+├── 0000.pgm
+├── 0001.pgm
+├── 0002.pgm
+└── ...
+```
+
+**Characteristics**:
+- Beams are ordered right to left
+- Each column represents a beam
+- Each row represents a range sample
+- Image dimensions: (samples_per_beam × num_beams)
+
+<Note>
+The raw frames are stored as-is from the ARIS file format. When displaying, flip the image for intuitive left-to-right beam ordering (see `view_recording.py:180`).
+</Note>
+
+### aris_polar/
+
+Polar-transformed ARIS frames showing the actual acoustic field of view.
+
+**Contents**: PNG images with polar coordinate transformation
+
+**Naming**: `NNNN.png` where NNNN matches the corresponding raw frame
+
+**Example**:
+```
+aris_polar/
+├── 0000.png
+├── 0001.png
+├── 0002.png
+└── ...
+```
+
+**Generation**: Created during preprocessing by `prep_2_aris_to_polar.py`
+
+**Advantages**:
+- Geometric representation of sonar FOV
+- Easier visual interpretation
+- Accounts for beam angles and range
+- Better for visualization and display
+
+### gopro/
+
+Synchronized camera frames from the GoPro Hero 8.
+
+**Contents**: JPEG images at FHD resolution (default)
+
+**Naming**: `NNNN.jpg` where NNNN is the synchronized ARIS frame index
+
+**Example**:
+```
+gopro/
+├── 0000.jpg
+├── 0001.jpg
+├── 0003.jpg  # Frame 0002 may be missing if no GoPro data available
+└── ...
+```
+
+<Warning>
+**Frame Gaps**: Not every ARIS frame has a corresponding GoPro frame. The GoPro frame rate may differ from ARIS, and some frames may be dropped during synchronization.
+</Warning>
+
+<Warning>
+**Label Coordinates**: If labels are provided, they were created on UHD resolution. Multiply coordinates by 3 when using FHD or other downsampled resolutions.
+</Warning>
+
+**Synchronization**: GoPro frames are matched to the nearest ARIS frame timestamp. See `view_recording.py:190-193` for the matching logic.
+
+## Metadata Files
+
+### aris_frame_meta.csv
+
+Per-frame metadata extracted from the ARIS recording.
+
+**Format**: CSV with 240+ columns
+
+**Index**: `FrameIndex` (integer)
+
+**Key Fields**:
+
+<Tabs>
+  <Tab title="Timing">
+    - `FrameIndex`: Frame number (0-based)
+    - `FrameTime`: Timestamp in microseconds
+    - `sonarTimeStamp`: Sonar internal timestamp
+  </Tab>
+  <Tab title="Pose">
+    - `SonarPan`: Pan angle in degrees
+    - `SonarTilt`: Tilt angle in degrees
+    - `SonarRoll`: Roll angle in degrees
+    - `SonarX`, `SonarY`, `SonarZ`: Position (if available)
+  </Tab>
+  <Tab title="Acquisition">
+    - `PingMode`: ARIS ping mode (determines beam count)
+    - `SamplesPerBeam`: Number of range samples
+    - `SampleRate`: Sample rate in MHz
+    - `FrameRate`: Acquisition frame rate
+    - `SoundSpeed`: Speed of sound (m/s)
+  </Tab>
+  <Tab title="Environment">
+    - `WaterTemp`: Water temperature (°C)
+    - `Salinity`: Water salinity (ppt)
+    - `Pressure`: Pressure sensor reading
+    - `Depth`: Depth estimate
+  </Tab>
+  <Tab title="Range Window">
+    - `WindowStart`: Range window start (meters)
+    - `WindowLength`: Range window length (meters)
+    - `TargetRange`: Detected target range
+  </Tab>
+</Tabs>
+
+**Usage Example**:
+```python
+import pandas as pd
+
+# Load frame metadata
+frame_meta = pd.read_csv(
+    "recording_001/aris_frame_meta.csv",
+    index_col="FrameIndex"
+)
+
+# Access data for frame 42
+frame_42 = frame_meta.loc[42]
+print(f"Timestamp: {frame_42['FrameTime']} μs")
+print(f"Pan: {frame_42['SonarPan']}°")
+print(f"Sound speed: {frame_42['SoundSpeed']} m/s")
+print(f"Beam count: {get_beamcount_from_pingmode(frame_42['PingMode'])}")
+```
+
+Full field definitions in `aris_definitions.py:69-247`.
+
+### aris_file_meta.yaml
+
+Recording-level metadata from the ARIS file header.
+
+**Format**: YAML key-value pairs
+
+**Key Fields**:
+```yaml
+Version: 5                    # ARIS file format version
+FrameCount: 1234             # Total frames in recording
+FrameRate: 5.0               # Recording frame rate (Hz)
+HighResolution: 1            # High resolution mode flag
+NumRawBeams: 128             # Number of beams
+SampleRate: 2.0              # Sample rate (MHz)
+SamplesPerChannel: 1024      # Samples per beam
+ReceiverGain: 40             # Receiver gain setting
+WindowStart: 2.0             # Range window start (m)
+WindowLength: 8.0            # Range window length (m)
+SN: 12345                    # Sonar serial number
+strDate: "2024-06-15"        # Recording date
+```
+
+**Usage**: Provides constant parameters that apply to the entire recording.
+
+Full definition in `aris_definitions.py:26-67`.
+
+### gantry.csv
+
+Gantry crane positions interpolated to match ARIS frame timestamps.
+
+**Format**: CSV with 4 columns
+
+**Schema**:
+```csv
+aris_frame_idx,x,y,z
+0,1.234567,2.345678,-1.456789
+1,1.234570,2.345680,-1.456790
+2,1.234573,2.345682,-1.456791
+```
+
+**Columns**:
+- `aris_frame_idx`: Corresponding ARIS frame index
+- `x`, `y`, `z`: Gantry position in world coordinates (meters)
+
+**Coordinate Frame**: World frame (fixed to the experimental tank)
+
+**Generation**: Extracted from ROS bags by `prep_5_gantry_extract.py` and synchronized by the export script.
+
+### ar3.csv
+
+AR3 robot arm poses calculated from gantry position and ARIS orientation.
+
+**Format**: CSV with 8 columns
+
+**Schema**:
+```csv
+aris_frame_idx,pos.x,pos.y,pos.z,rot.x,rot.y,rot.z,rot.w
+0,1.234567,2.345678,-1.456789,0.0,0.0,0.0,1.0
+1,1.234570,2.345680,-1.456790,0.001,0.002,0.003,0.999
+```
+
+**Columns**:
+- `aris_frame_idx`: Corresponding ARIS frame index
+- `pos.x`, `pos.y`, `pos.z`: AR3 position in world coordinates (meters)
+- `rot.x`, `rot.y`, `rot.z`, `rot.w`: AR3 orientation as quaternion (x, y, z, w)
+
+**Calculation**: From `release_1_export.py:18-36`
+
+```python
+def _create_ar3_df(df_aris_metadata, df_portal_crane):
+    tm = get_tf_manager()
+    
+    poss = []
+    for index, row in df_portal_crane.iterrows():
+        A2B = np.eye(4) 
+        A2B[:3,3] = np.array(row[['x','y','z']])
+        tm.add_transform("setup/portal_crane", "world", A2B=A2B)
+        poss.append(tm.get_transform("setup/ar3", "world")[:3, 3])
+    
+    rots = [(R.from_matrix(tm.get_transform("setup/ar3", "world")[:3,:3]) * 
+             R.from_euler('xyz', row[['SonarRoll', 'SonarTilt', 'SonarPan']], 
+                         degrees=True)).as_quat() 
+            for index, row in df_aris_metadata.iterrows()]
+```
+
+The AR3 pose combines:
+1. Gantry position (from `gantry.csv`)
+2. Static transform from gantry to AR3 (from `calibration/transforms.yaml`)
+3. ARIS orientation angles (from `aris_frame_meta.csv`)
+
+### notes.txt
+
+Free-form notes about the recording.
+
+**Format**: Plain text
+
+**Contents**:
+- **Target type** (required): Used to organize recordings into folders
+- Trajectory description
+- Recording conditions
+- Special observations
+- Any relevant notes
+
+**Example**:
+```txt
+Target: 100lbs
+Trajectory: Forward pass at 2m distance, 0.1 m/s velocity
+Conditions: Clear water, temperature 15°C
+Notes: High quality recording, full target visibility
+Camera: Good lighting conditions
+```
+
+**Target Type Parsing**: The export script searches for a line containing "target:" to determine the folder structure (`release_1_export.py:38-43`).
+
+## Frame Indexing and Synchronization
+
+### ARIS as Temporal Reference
+
+All data is synchronized to ARIS frame indices:
+
+```python
+# From view_recording.py:171-198
+def get_data(self, pos):
+    # Step through ARIS frames
+    aris_file = self.aris_frames[pos]
+    aris_frame_idx = int(os.path.splitext(os.path.basename(aris_file))[0])
+    
+    # Load ARIS frame
+    aris_frame = cv2.imread(aris_file)
+    
+    # Get matching GoPro frame by index
+    if pos < len(self.gopro_frames):
+        gopro = QtGui.QPixmap(self.gopro_frames[aris_frame_idx])
+    
+    # Get synchronized metadata
+    gantry = self.gantry_data.loc[aris_frame_idx]
+    frame_meta = self.aris_frame_meta.loc[aris_frame_idx]
+```
+
+### Synchronization Workflow
+
+1. **ARIS timestamps** serve as the primary time reference
+2. **Gantry positions** are interpolated to ARIS frame times
+3. **GoPro frames** are matched to the closest ARIS timestamp
+4. **Frame indices** are consistent across all data types
+
+<Note>
+The ARIS frame index is the key that links all data together. Use it as the primary key when loading synchronized data.
+</Note>
+
+## Typical Recording Characteristics
+
+### Frame Counts
+
+- **Typical recording**: 100-1000 ARIS frames
+- **Frame rate**: 3-10 Hz (varies by recording)
+- **Duration**: 10-200 seconds per trajectory
+- **Total dataset**: ~100 recordings, 74,000+ frames
+
+### Data Completeness
+
+Not all recordings have complete data:
+
+<AccordionGroup>
+  <Accordion title="ARIS Data">
+    **Always present**: Every recording has ARIS raw and polar frames
+    
+    Files: `aris_raw/*.pgm`, `aris_polar/*.png`, `aris_frame_meta.csv`, `aris_file_meta.yaml`
+  </Accordion>
+  
+  <Accordion title="GoPro Data">
+    **Usually present**: Most recordings have GoPro footage
+    
+    **Gaps possible**: Some ARIS frames may not have matching GoPro frames due to:
+    - Frame rate differences
+    - GoPro recording dropouts
+    - Battery issues
+    - Synchronization trimming
+    
+    Check: Test for file existence before loading GoPro frames
+  </Accordion>
+  
+  <Accordion title="Gantry/AR3 Data">
+    **Always present**: Every recording has gantry and AR3 pose data
+    
+    Files: `gantry.csv`, `ar3.csv`
+    
+    **Coverage**: Matches ARIS frame indices exactly
+  </Accordion>
+</AccordionGroup>
+
+## Loading a Complete Recording
+
+### Python Example
+
+```python
+import os
+import cv2
+import yaml
+import pandas as pd
+from typing import Optional
+
+class Recording:
+    def __init__(self, recording_dir: str):
+        self.recording_dir = recording_dir
+        
+        # Load ARIS frames
+        aris_raw_dir = os.path.join(recording_dir, 'aris_raw')
+        self.aris_raw = sorted([
+            os.path.join(aris_raw_dir, f) 
+            for f in os.listdir(aris_raw_dir)
+        ])
+        
+        aris_polar_dir = os.path.join(recording_dir, 'aris_polar')
+        self.aris_polar = sorted([
+            os.path.join(aris_polar_dir, f) 
+            for f in os.listdir(aris_polar_dir)
+        ])
+        
+        # Load GoPro frames (as dict for sparse access)
+        gopro_dir = os.path.join(recording_dir, 'gopro')
+        if os.path.isdir(gopro_dir):
+            self.gopro = {
+                int(os.path.splitext(f)[0]): os.path.join(gopro_dir, f)
+                for f in os.listdir(gopro_dir)
+            }
+        else:
+            self.gopro = {}
+        
+        # Load metadata
+        self.frame_meta = pd.read_csv(
+            os.path.join(recording_dir, 'aris_frame_meta.csv'),
+            index_col='FrameIndex'
+        )
+        
+        with open(os.path.join(recording_dir, 'aris_file_meta.yaml')) as f:
+            self.file_meta = yaml.safe_load(f)
+        
+        self.gantry = pd.read_csv(
+            os.path.join(recording_dir, 'gantry.csv'),
+            index_col='aris_frame_idx'
+        )
+        
+        self.ar3 = pd.read_csv(
+            os.path.join(recording_dir, 'ar3.csv'),
+            index_col='aris_frame_idx'
+        )
+        
+        # Load notes
+        notes_file = os.path.join(recording_dir, 'notes.txt')
+        if os.path.isfile(notes_file):
+            with open(notes_file) as f:
+                self.notes = f.read()
+    
+    def get_frame(self, idx: int) -> dict:
+        """Get all data for a specific ARIS frame index."""
+        return {
+            'aris_raw': cv2.imread(self.aris_raw[idx], cv2.IMREAD_GRAYSCALE),
+            'aris_polar': cv2.imread(self.aris_polar[idx]),
+            'gopro': cv2.imread(self.gopro[idx]) if idx in self.gopro else None,
+            'frame_meta': self.frame_meta.loc[idx],
+            'gantry': self.gantry.loc[idx],
+            'ar3': self.ar3.loc[idx],
+        }
+
+# Usage
+rec = Recording('recordings/100lbs/recording_001')
+frame_data = rec.get_frame(42)
+```
+
+## Viewer Script
+
+The dataset includes an interactive viewer for synchronized playback:
+
+```bash
+python scripts/view_recording.py recordings/100lbs/<recording-folder>
+```
+
+**Features**:
+- Synchronized display of ARIS and GoPro frames
+- Frame metadata display
+- Keyboard navigation (arrow keys)
+- Colorization options for ARIS data
+
+**Implementation**: See `view_recording.py` for the full viewer code.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="File Formats" href="/structure/file-formats">
+    Learn about the specific file formats and schemas
+  </Card>
+  <Card title="Target Details" href="/structure/targets">
+    Explore the UXO targets and calibration data
+  </Card>
+</CardGroup>

@@ -1,0 +1,217 @@
+---
+title: Dataset Properties
+description: Detailed specifications and characteristics of the UXO Dataset 2024
+---
+
+## Dataset Characteristics
+
+The UXO Dataset 2024 provides comprehensive multimodal data with synchronized acoustic and optical sensing capabilities. All data was recorded in a controlled experimental environment to ensure accuracy and repeatability.
+
+## Included Data Types
+
+The dataset includes the following data formats and types:
+
+<CardGroup cols={2}>
+  <Card title="Sonar Data" icon="water">
+    Raw and polar-transformed ARIS frames
+  </Card>
+  <Card title="Optical Data" icon="camera">
+    Annotated GoPro camera frames
+  </Card>
+  <Card title="Pose Information" icon="location-dot">
+    Sonar and target pose data
+  </Card>
+  <Card title="3D Models" icon="cube">
+    Textured 3D models of UXO targets
+  </Card>
+</CardGroup>
+
+### Additional Resources
+
+- Calibration matrices for both sensors
+- Known transforms between sonar and targets
+- Trajectory data from gantry crane system
+- Target dimensions and munition type specifications
+
+## ARIS Explorer 3000 Sonar Specifications
+
+The dataset uses an **ARIS Explorer 3000** imaging sonar for acoustic data collection.
+
+### Sonar Data Formats
+
+<Tabs>
+  <Tab title="Raw Format">
+    - **Format**: `.pgm` files
+    - **Content**: Individual sonar frames with full resolution
+    - **Metadata**: Accompanying `.csv` files with frame information
+  </Tab>
+  <Tab title="Polar Transform">
+    - **Format**: `.png` images
+    - **Resolution**: 1000 pixels per meter (configurable)
+    - **Compression**: PNG compression level 9
+    - **Method**: Polar2 transformation (recommended)
+  </Tab>
+  <Tab title="Point Cloud">
+    - **Format**: `.csv` files
+    - **Accuracy**: 64-bit floating point
+    - **Size**: ~12MB per frame
+    - **Use**: High-precision analysis
+  </Tab>
+</Tabs>
+
+### Transform Chain
+
+The sonar positioning follows this transform hierarchy:
+
+```yaml
+setup/portal_crane
+  └─ setup/ar3
+      └─ setup/aris
+          └─ setup/sonar (acoustic origin)
+```
+
+<Info>
+The sonar origin is offset from the ARIS mounting point by 108.725mm in the X direction.
+</Info>
+
+## GoPro Hero 8 Camera Specifications
+
+### Video Recording
+
+- **Maximum Resolution**: Ultra HD (5.3k, 5312x2988)
+- **Export Resolutions Available**:
+  - UHD: 5312x2988 (full resolution)
+  - FHD: 1920x1080 (Full HD)
+  - SD: 640x360 (preview quality)
+
+### Frame Annotations
+
+<Warning>
+When using GoPro frame labels, multiply coordinates by 3 to account for the resolution scaling.
+</Warning>
+
+### Exported Frame Format
+
+- **Format**: `.jpg` (JPEG)
+- **Default Export Resolution**: FHD (1920x1080)
+- **Frame Extraction**: Individual frames exported from video
+
+### Camera Transform Chain
+
+```yaml
+setup/ar3
+  └─ setup/gopro_mounting_hole
+      └─ setup/gopro_mounting_axis
+          └─ setup/camera (optical origin)
+```
+
+## UXO Target Types
+
+The dataset includes recordings of **3 distinct types** of unexploded ordnance:
+
+<CardGroup cols={3}>
+  <Card title="100lbs Bomb" icon="bomb">
+    Standard aircraft bomb replica
+  </Card>
+  <Card title="Mortar Shell" icon="circle">
+    Artillery mortar shell
+  </Card>
+  <Card title="Incendiary Device" icon="fire">
+    Incendiary munition type
+  </Card>
+</CardGroup>
+
+### Target Data Provided
+
+- Munition type specifications
+- Physical dimensions
+- Textured 3D models
+- Fixed world coordinates in the tank
+- Ground truth pose for each frame
+
+## Trajectory Patterns
+
+The dataset contains **close to 100 trajectories** recorded using a custom gantry crane system.
+
+### Trajectory Characteristics
+
+<Note>
+Trajectories are designed to be typical and achievable for non-experimental environments, making them suitable for training real-world AUV systems.
+</Note>
+
+- **Recording Method**: Controlled gantry crane with ROS tracking
+- **Data Format**: `.csv` files with timestamped positions
+- **Synchronization**: Matched with sonar and camera data
+- **Motion Profiles**: Various approach angles and speeds
+
+### Trajectory Data
+
+```csv
+timestamp, x, y, z, qx, qy, qz, qw
+```
+
+Each trajectory includes:
+- 6DOF pose information (position + orientation)
+- Precise timestamps
+- Motion onset and end markers
+
+## Recording Conditions
+
+### Environment
+
+- **Setting**: Controlled underwater tank
+- **Lighting**: Consistent for optical recording
+- **Water Conditions**: Stable, controlled environment
+- **Target Placement**: Fixed positions with known coordinates
+
+### Synchronization
+
+The dataset provides multi-sensor synchronization:
+
+1. **ARIS Sonar**: Primary timing reference
+2. **GoPro Camera**: Motion-matched to sonar data
+3. **Gantry Crane**: ROS timestamps aligned with sensors
+
+<Info>
+Optical flow analysis was used to match GoPro footage with ARIS data, as the GoPro does not provide synchronized timestamps.
+</Info>
+
+## Data Formats
+
+The dataset uses simple, well-established formats for maximum compatibility:
+
+<CardGroup cols={3}>
+  <Card title="Images">
+    `.pgm`, `.png`, `.jpg`
+  </Card>
+  <Card title="Tabular Data">
+    `.csv`
+  </Card>
+  <Card title="Metadata">
+    `.yaml`, `.json`, `.txt`
+  </Card>
+</CardGroup>
+
+## Calibration Data
+
+The dataset includes comprehensive calibration information:
+
+### Camera Calibration
+
+Multiple camera parameter sets for different field-of-view modes:
+- Wide angle
+- Superview
+- Linear
+- Narrow
+
+### Transform Calibration
+
+Accurate transforms between:
+- Sonar and camera
+- Sensors and mounting points
+- Gantry crane and world frame
+- All UXO targets and world frame
+
+<Note>
+All calibration matrices and transform trees are provided in standard `.yaml` format.
+</Note>

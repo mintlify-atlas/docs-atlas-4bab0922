@@ -1,0 +1,371 @@
+---
+title: File Formats
+description: Detailed documentation of all file formats used in the UXO Dataset 2024
+---
+
+The UXO Dataset 2024 uses simple, well-established file formats for maximum accessibility and ease of use.
+
+## Image Formats
+
+### PGM - ARIS Raw Frames
+
+ARIS raw frames are stored as 8-bit grayscale PGM (Portable Gray Map) images.
+
+**Format**: `.pgm`
+
+**Characteristics**:
+- Grayscale images representing raw sonar beam intensities
+- Each pixel represents a single sample from a beam
+- Beams are ordered **right to left** in the image
+- Dimensions vary based on ping mode (48, 64, 96, or 128 beams)
+
+<Note>
+The raw ARIS frames store beam data ordered right to left. When displaying, you may want to flip the image for intuitive viewing (see `view_recording.py:180`).
+</Note>
+
+**Beam Count by Ping Mode**:
+
+```python
+def get_beamcount_from_pingmode(pingmode):
+    if pingmode in [1, 2]:
+        return 48
+    if pingmode in [3, 4, 5]:
+        return 96
+    if pingmode in [6, 7, 8]:
+        return 64
+    if pingmode in [9, 10, 11, 12]:
+        return 128
+```
+
+From `aris_definitions.py:4-17`
+
+### PNG - ARIS Polar Frames
+
+ARIS polar frames represent the sonar data transformed into the actual field-of-view geometry.
+
+**Format**: `.png`
+
+**Characteristics**:
+- Polar coordinate transformation of raw beam data
+- Represents what the sonar actually "sees"
+- Can be colorized for visualization (e.g., using TWILIGHT_SHIFTED colormap)
+- Better for human interpretation and visualization
+
+**Polar Transformation**:
+
+The polar transformation accounts for:
+- Beam angles (see `BeamWidthsAris3000_64` and `BeamWidthsAris3000_128` in `aris_definitions.py`)
+- Range bins along each beam
+- Fan-shaped acoustic field of view (±15° horizontal)
+
+<Accordion title="ARIS 3000 Beam Angles (64 beams)">
+The ARIS 3000 in 64-beam mode has the following angular coverage:
+
+- **Horizontal FOV**: ±15°
+- **Center beam angles**: Range from -14.89° to +14.89°
+- **Beam width**: ~0.46° per beam
+
+Full beam angle definitions are provided in `aris_definitions.py:251-316` as triplets of (center, left, right) angles for each beam.
+</Accordion>
+
+<Accordion title="ARIS 3000 Beam Angles (128 beams)">
+The ARIS 3000 in 128-beam mode has:
+
+- **Horizontal FOV**: ±15°
+- **Center beam angles**: Range from -15.01° to +15.02°
+- **Beam width**: ~0.24° per beam
+
+Full beam angle definitions are provided in `aris_definitions.py:319-448`.
+</Accordion>
+
+### JPG - GoPro Camera Frames
+
+Camera frames from the GoPro Hero 8.
+
+**Format**: `.jpg`
+
+**Characteristics**:
+- Downsampled from original UHD resolution
+- Default export resolution: FHD (1920×1080)
+- Synchronized to ARIS frame timestamps
+- Compressed JPEG format for reduced file size
+
+<Warning>
+Labels were created on UHD resolution frames. If using FHD or other downsampled resolutions, **multiply label coordinates by 3**.
+</Warning>
+
+## Tabular Data Formats
+
+### CSV - Metadata and Poses
+
+Several CSV files store synchronized metadata and pose information.
+
+#### aris_frame_meta.csv
+
+Contains per-frame metadata from the ARIS sonar.
+
+**Schema** (selected fields from 240+ total):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `FrameIndex` | int | Frame number (primary key) |
+| `FrameTime` | uint64 | Frame timestamp in microseconds |
+| `SonarPan` | float | Sonar pan angle (degrees) |
+| `SonarTilt` | float | Sonar tilt angle (degrees) |
+| `SonarRoll` | float | Sonar roll angle (degrees) |
+| `PingMode` | int | ARIS ping mode (determines beam count) |
+| `SamplesPerBeam` | int | Number of range samples per beam |
+| `SoundSpeed` | float | Speed of sound in water (m/s) |
+| `WindowStart` | float | Range window start (meters) |
+| `WindowLength` | float | Range window length (meters) |
+| `Salinity` | float | Water salinity (ppt) |
+| `WaterTemp` | float | Water temperature (°C) |
+
+<Accordion title="Full Frame Header Fields">
+The complete list of 240+ ARIS frame header fields is defined in `aris_definitions.py:69-247`. Key categories include:
+
+- **Timing**: FrameIndex, FrameTime, timestamps
+- **Sonar pose**: SonarX, SonarY, SonarZ, SonarPan, SonarTilt, SonarRoll
+- **Acquisition**: PingMode, SamplesPerBeam, SampleRate, SoundSpeed
+- **Environment**: WaterTemp, Salinity, Pressure
+- **Status**: Battery, various fault flags
+- **Navigation**: GPS data, heading, depth, altitude
+</Accordion>
+
+#### gantry.csv
+
+Gantry crane position data interpolated to ARIS frame times.
+
+**Schema**:
+
+```csv
+aris_frame_idx,x,y,z
+0,1.234567,2.345678,3.456789
+1,1.234568,2.345679,3.456790
+...
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `aris_frame_idx` | int | Corresponding ARIS frame index |
+| `x` | float | Gantry X position (meters) |
+| `y` | float | Gantry Y position (meters) |
+| `z` | float | Gantry Z position (meters) |
+
+Positions are in the world coordinate frame.
+
+#### ar3.csv
+
+AR3 robot arm poses calculated from gantry position and ARIS metadata.
+
+**Schema**:
+
+```csv
+aris_frame_idx,pos.x,pos.y,pos.z,rot.x,rot.y,rot.z,rot.w
+0,1.234567,2.345678,3.456789,0.0,0.0,0.0,1.0
+...
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `aris_frame_idx` | int | Corresponding ARIS frame index |
+| `pos.x`, `pos.y`, `pos.z` | float | AR3 position (meters) |
+| `rot.x`, `rot.y`, `rot.z`, `rot.w` | float | AR3 orientation (quaternion) |
+
+The AR3 pose combines:
+- Gantry position
+- Gantry-to-AR3 transform from `calibration/transforms.yaml`
+- ARIS roll/tilt/pan angles from frame metadata
+
+See `release_1_export.py:18-36` for the calculation.
+
+### YAML - Calibration and Metadata
+
+#### aris_file_meta.yaml
+
+File-level ARIS recording metadata.
+
+**Format**: YAML key-value pairs
+
+**Example fields**:
+```yaml
+Version: 5
+FrameCount: 1234
+FrameRate: 5.0
+HighResolution: 1
+NumRawBeams: 128
+SampleRate: 2.0
+SamplesPerChannel: 1024
+ReceiverGain: 40
+SN: 12345
+strDate: "2024-06-15"
+```
+
+Full file header definition in `aris_definitions.py:26-67`.
+
+#### transforms.yaml
+
+Calibration transforms between all coordinate frames.
+
+**Format**: Hierarchical YAML with transform definitions
+
+**Structure**:
+```yaml
+setup:
+  - frame_id: "setup/ar3"
+    parent_frame_id: "setup/portal_crane"
+    translation:
+      x: 0.0
+      y: 0.174
+      z: -0.338
+    rotation:  # Quaternion (x, y, z, w)
+      x: 0.0
+      y: 1.0
+      z: 0.0
+      w: 0.0
+  - frame_id: "setup/aris"
+    parent_frame_id: "setup/ar3"
+    ...
+
+targets:
+  - frame_id: "target/100lbs"
+    parent_frame_id: "world"
+    translation:
+      x: 1.251079
+      y: 1.592704
+      z: -1.489828
+    rotation:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      w: 1.0
+```
+
+See [Target Details](/structure/targets) for more information.
+
+## Text Formats
+
+### notes.txt
+
+Free-form notes about each recording.
+
+**Format**: Plain text
+
+**Contents**:
+- Target type identifier (e.g., "Target: 100lbs")
+- Recording conditions
+- Special notes or observations
+- Trajectory description
+
+**Example**:
+```txt
+Target: 100lbs
+Trajectory: Forward pass, 2m distance
+Conditions: Clear water, good visibility
+Notes: Multiple views of the same target
+```
+
+The target type line is parsed by the export script to organize recordings into folders (`release_1_export.py:38-43`).
+
+## Binary Formats
+
+### ARIS Frame Data Structure
+
+While the exported dataset uses standard image formats, the original ARIS recordings use a binary format with specific header structures.
+
+**File Header**: 1024 bytes (defined by `FileHeaderDefinition`)
+
+**Frame Header**: 1024 bytes per frame (defined by `FrameHeaderDefinition`)
+
+**Frame Data**: Variable size based on beam count and samples per beam
+
+From `aris_definitions.py:21-23`:
+```python
+FileHeaderDefinition = '< IIIII f II ff II 32s 256s iiii IIIIIIIIIIIIIIIIII QQQ II 568x'
+FrameHeaderDefinition = '< I Q II Q IIIIII ff I i IIIIII ffffffffffffffffffff dd f I fff IIII f I fffffffff d f III fff IIIIIII ffffff 16f ffff IIIIII ff IIIIII Q IIIIII ffff IIIIIIIIIIIIIIIII fff III ffffffffffff IIIIII HH Q fff II 288x'
+```
+
+These binary structures are parsed during preprocessing and exported to the simpler CSV and image formats.
+
+## Format Summary Table
+
+| Extension | Type | Usage | Location |
+|-----------|------|-------|----------|
+| `.pgm` | Image | ARIS raw frames | `aris_raw/` |
+| `.png` | Image | ARIS polar frames | `aris_polar/` |
+| `.jpg` | Image | GoPro camera frames | `gopro/` |
+| `.csv` | Tabular | Frame metadata | `aris_frame_meta.csv` |
+| `.csv` | Tabular | Gantry positions | `gantry.csv` |
+| `.csv` | Tabular | AR3 poses | `ar3.csv` |
+| `.yaml` | Config | File metadata | `aris_file_meta.yaml` |
+| `.yaml` | Config | Calibration | `calibration/transforms.yaml` |
+| `.txt` | Text | Recording notes | `notes.txt` |
+
+## Working with the Data
+
+### Python Example
+
+```python
+import os
+import cv2
+import yaml
+import pandas as pd
+
+# Load recording data
+recording_dir = "recordings/100lbs/recording_001"
+
+# Load ARIS frames
+aris_frame = cv2.imread(
+    os.path.join(recording_dir, "aris_polar/0042.png"), 
+    cv2.IMREAD_GRAYSCALE
+)
+
+# Load GoPro frame
+gopro_frame = cv2.imread(
+    os.path.join(recording_dir, "gopro/0042.jpg")
+)
+
+# Load metadata
+frame_meta = pd.read_csv(
+    os.path.join(recording_dir, "aris_frame_meta.csv"),
+    index_col="FrameIndex"
+)
+gantry_data = pd.read_csv(
+    os.path.join(recording_dir, "gantry.csv"),
+    index_col="aris_frame_idx"
+)
+ar3_pose = pd.read_csv(
+    os.path.join(recording_dir, "ar3.csv"),
+    index_col="aris_frame_idx"
+)
+
+# Load file metadata
+with open(os.path.join(recording_dir, "aris_file_meta.yaml")) as f:
+    file_meta = yaml.safe_load(f)
+
+# Access specific frame data
+frame_42_meta = frame_meta.loc[42]
+print(f"Sound speed: {frame_42_meta['SoundSpeed']} m/s")
+print(f"Gantry position: {gantry_data.loc[42].values}")
+```
+
+### Viewing Tool
+
+The dataset includes a viewer script for synchronized playback:
+
+```bash
+python scripts/view_recording.py recordings/100lbs/<recording-folder>
+```
+
+Use arrow keys to navigate frames. See `view_recording.py` for implementation.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Recording Structure" href="/structure/recordings">
+    Learn about the organization of recording folders
+  </Card>
+  <Card title="Target Details" href="/structure/targets">
+    Explore calibration and target specifications
+  </Card>
+</CardGroup>

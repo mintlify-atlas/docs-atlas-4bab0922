@@ -1,0 +1,203 @@
+---
+title: Installation
+description: Set up your environment to work with the UXO Dataset 2024
+---
+
+This guide will help you install the necessary dependencies to work with the UXO Dataset 2024, including viewing, processing, and analyzing the data.
+
+## System Requirements
+
+Before installing, ensure your system meets the following requirements:
+
+<CardGroup cols={2}>
+  <Card title="Python" icon="python">
+    Python 3.8 or higher recommended
+  </Card>
+  <Card title="Operating System" icon="desktop">
+    Linux, macOS, or Windows
+  </Card>
+</CardGroup>
+
+<Note>
+Some preprocessing scripts require ROS1 (Robot Operating System). For these scripts, Ubuntu 20.04 with ROS Noetic is recommended, or use [robostack](https://robostack.github.io/) to set up a ROS1 environment.
+</Note>
+
+## Installation Steps
+
+<Steps>
+  <Step title="Clone the Repository">
+    First, clone the UXO Dataset 2024 processing scripts repository:
+
+    ```bash
+    git clone https://github.com/dfki-ric/uxo-dataset2024.git
+    cd uxo-dataset2024
+    ```
+  </Step>
+
+  <Step title="Create Virtual Environment (Recommended)">
+    Create and activate a Python virtual environment to isolate dependencies:
+
+    <CodeGroup>
+      ```bash Linux/macOS
+      python3 -m venv venv
+      source venv/bin/activate
+      ```
+
+      ```bash Windows
+      python -m venv venv
+      venv\Scripts\activate
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Install Python Dependencies">
+    Install the required Python packages from `requirements.txt`:
+
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+    This will install the following key dependencies:
+
+    - **ffmpeg** (1.4) - Video processing
+    - **matplotlib** (3.9.0) - Data visualization
+    - **numpy** (2.0.1) - Numerical computing
+    - **pandas** (2.2.2) - Data manipulation
+    - **PyQt5** (5.15.11) - GUI framework for the viewer
+    - **pytransform3d** (3.5.0) - 3D transformations
+    - **PyYAML** (6.0.1) - YAML file parsing
+    - **scipy** (1.14.0) - Scientific computing
+    - **tqdm** (4.66.2) - Progress bars
+  </Step>
+
+  <Step title="Install OpenCV">
+    OpenCV is required for image processing but may need to be installed separately:
+
+    ```bash
+    pip install opencv-python
+    ```
+  </Step>
+
+  <Step title="Verify Installation">
+    Verify that all dependencies are installed correctly:
+
+    ```bash
+    python -c "import cv2, yaml, pandas, PyQt5; print('All dependencies installed successfully')"
+    ```
+
+    If this command runs without errors, you're ready to use the dataset tools.
+  </Step>
+</Steps>
+
+## ROS1 Setup (Optional)
+
+<Warning>
+ROS1 is only required if you plan to run preprocessing scripts that extract data from ROS bag files (e.g., `prep_5_gantry_extract.py`). If you're only viewing or analyzing the exported dataset, you can skip this section.
+</Warning>
+
+For scripts that interact with ROS1 bag files:
+
+### Option 1: Ubuntu 20.04 with ROS Noetic
+
+If you're running Ubuntu 20.04, install ROS Noetic:
+
+```bash
+# Add ROS repository
+sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list'
+
+# Add keys
+sudo apt-key adv --keyserver 'hkp://keyserver.ubuntu.com:80' --recv-key C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654
+
+# Install ROS Noetic
+sudo apt update
+sudo apt install ros-noetic-desktop-full
+
+# Initialize rosdep
+sudo rosdep init
+rosdep update
+```
+
+### Option 2: Docker Container
+
+Use an Ubuntu 20.04 Docker container with ROS1:
+
+```bash
+docker pull ros:noetic
+docker run -it --rm -v $(pwd):/workspace ros:noetic bash
+```
+
+### Option 3: Robostack
+
+Use [robostack](https://robostack.github.io/) to set up ROS1 in a conda environment:
+
+```bash
+conda create -n ros_env python=3.9
+conda activate ros_env
+conda install -c robostack ros-noetic-desktop
+```
+
+## Configuration
+
+The processing scripts use a configuration file located at `scripts/config.yaml`. This file contains paths and settings for data processing.
+
+<Accordion title="View config.yaml structure">
+  The configuration file includes settings for:
+
+  - **Input/output paths** for ARIS, gantry, and GoPro data
+  - **Image formats** and compression settings
+  - **Polar transformation methods** and resolution
+  - **Optical flow calculation** parameters
+  - **Export settings** for the dataset
+
+  You generally don't need to modify this file unless you're reprocessing the raw data.
+</Accordion>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="PyQt5 Installation Issues">
+    If you encounter issues installing PyQt5, especially on Linux:
+
+    ```bash
+    # Install system dependencies first
+    sudo apt-get install python3-pyqt5
+    ```
+
+    Or use conda:
+
+    ```bash
+    conda install pyqt
+    ```
+  </Accordion>
+
+  <Accordion title="OpenCV Import Errors">
+    If you get `ImportError: libGL.so.1` on Linux:
+
+    ```bash
+    sudo apt-get install libgl1-mesa-glx
+    ```
+  </Accordion>
+
+  <Accordion title="FFmpeg Codec Issues">
+    If you encounter video codec errors:
+
+    ```bash
+    # Install system FFmpeg
+    sudo apt-get install ffmpeg  # Linux
+    brew install ffmpeg          # macOS
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+Now that you have the dependencies installed:
+
+<CardGroup cols={2}>
+  <Card title="View the Data" icon="eye" href="/getting-started/viewing-data">
+    Learn how to use the dataset viewer
+  </Card>
+  <Card title="Dataset Structure" icon="folder" href="/structure/overview">
+    Understand the organization of the dataset
+  </Card>
+</CardGroup>

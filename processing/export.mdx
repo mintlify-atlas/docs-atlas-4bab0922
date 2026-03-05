@@ -1,0 +1,507 @@
+---
+title: Export
+description: Assemble and package the final UXO dataset for distribution
+---
+
+The export script assembles preprocessed data from ARIS, GoPro, and gantry sources into a synchronized, ready-to-distribute dataset. This is the final stage of the preprocessing pipeline.
+
+## Export Script
+
+The main export is performed by:
+- **release_1_export.py** - Assembles synchronized dataset
+- **release_2_archive.bash** - Creates distribution archives (not covered in source files)
+
+## Configuration
+
+```yaml config.yaml
+# Export settings
+export_dir: "../data_export"
+export_gopro_resolution: "fhd"      # Only one resolution: uhd, fhd, or sd
+export_gopro_format: "jpg"          # Frame format: jpg or png
+export_only_with_gopro: True        # Only export frames with GoPro overlap
+
+# Input data (from preprocessing)
+match_file: "../data_processed/matches.csv"
+aris_to_polar_image_format: png
+```
+
+## Export Process Overview
+
+The export script processes each matched recording pair:
+
+<Steps>
+  <Step title="Load matches">
+    Read `matches.csv` containing:
+    - ARIS recording path
+    - Gantry trajectory path
+    - GoPro clip path (if available)
+    - Time offsets between sensors
+    - Motion onset/end frames
+    - Recording notes
+  </Step>
+  
+  <Step title="Create output directories">
+    Organize by target type:
+    ```
+    data_export/
+    └── recordings/
+        ├── <target_type>/
+        │   └── <recording_name>/
+        │       ├── aris_raw/
+        │       ├── aris_polar/
+        │       └── gopro/
+    ```
+  </Step>
+  
+  <Step title="Export synchronized frames">
+    For each ARIS frame in the active range:
+    - Copy raw ARIS frame (.pgm)
+    - Copy polar ARIS frame (.png)
+    - Extract matching GoPro frame (.jpg)
+    - Record gantry position at frame time
+  </Step>
+  
+  <Step title="Export metadata">
+    Generate:
+    - `aris_frame_meta.csv` - Per-frame ARIS metadata
+    - `aris_file_meta.yaml` - Recording-level ARIS metadata
+    - `gantry.csv` - Gantry positions for each frame
+    - `ar3.csv` - ARIS positions in world frame
+    - `notes.txt` - Recording notes
+  </Step>
+  
+  <Step title="Copy additional resources">
+    - 3D models of UXO targets
+    - Calibration matrices
+    - Scripts and documentation
+  </Step>
+</Steps>
+
+## Matching Context
+
+The `MatchingContext` class encapsulates all data for a recording:
+
+```python
+ctx = MatchingContext(
+    aris_dir,           # Path to extracted ARIS data
+    gantry_file,        # Path to gantry CSV
+    gopro_file,         # Path to GoPro clip
+    polar_img_format='png'
+)
+
+# Set synchronization parameters
+ctx.aris_start_frame = match['aris_onset']
+ctx.gopro_offset = match['gopro_offset']      # Temporal offset in seconds
+ctx.gantry_offset = match['gantry_offset']    # Temporal offset in microseconds
+```
+
+This provides convenient methods:
+- `ctx.get_aris_frametime(frame_idx)` - Get timestamp for ARIS frame
+- `ctx.get_gopro_frame(timestamp)` - Get GoPro frame at given time
+- `ctx.get_gantry_odom(timestamp)` - Get gantry position at given time
+
+## Frame Synchronization
+
+For each ARIS frame, the export script retrieves synchronized data:
+
+```python
+for aris_frame_idx in range(ctx.aris_start_frame, ctx.aris_end_frame + 1):
+    # Get ARIS frame timestamp
+    frametime = ctx.get_aris_frametime(aris_frame_idx)
+    
+    # Get matching GoPro frame
+    gopro_frame, _ = ctx.get_gopro_frame(frametime)
+    if gopro_frame is not None:
+        cv2.imwrite(f'gopro/{aris_frame_idx:04}.jpg', gopro_frame)
+    
+    # Get gantry position at this time
+    (x, y, z), _ = ctx.get_gantry_odom(frametime)
+    gantry_data.append((aris_frame_idx, x, y, z))
+    
+    # Copy ARIS frames
+    shutil.copy(ctx.aris_frames_raw[aris_frame_idx], f'aris_raw/{aris_frame_idx:04}.pgm')
+    shutil.copy(ctx.aris_frames_polar[aris_frame_idx], f'aris_polar/{aris_frame_idx:04}.png')
+```
+
+## GoPro Trimming
+
+When `export_only_with_gopro: True`, only frames with matching GoPro footage are exported:
+
+```python
+if trim_from_gopro and gopro_frame is None:
+    continue  # Skip this ARIS frame
+```
+
+This ensures the dataset only contains fully synchronized multimodal data.
+
+<Note>
+Some ARIS recordings may have more frames than GoPro clips (e.g., if GoPro battery died). This option creates a tighter, cleaner dataset.
+</Note>
+
+## Target Type Classification
+
+Recordings are organized by target type, extracted from notes:
+
+```python
+def get_target_type(notes: str) -> str:
+    for line in notes.splitlines():
+        if 'target:' in line.lower():
+            return line.split(':', maxsplit=1)[-1].strip().lower().replace(' ', '_')
+    return 'other'
+```
+
+Example notes format:
+```
+Target: 155mm_shell
+Condition: Good visibility
+Notes: Clean trajectory, full GoPro coverage
+```
+
+Results in directory: `recordings/155mm_shell/<recording_name>/`
+
+## Transform Calculation: AR3 Positions
+
+The export script calculates ARIS positions in the world frame using transform chains:
+
+```python
+def _create_ar3_df(df_aris_metadata, df_portal_crane):
+    tm = get_tf_manager()
+    
+    positions = []
+    for index, row in df_portal_crane.iterrows():
+        # Set gantry position
+        A2B = np.eye(4)
+        A2B[:3,3] = np.array(row[['x','y','z']])
+        tm.add_transform("setup/portal_crane", "world", A2B=A2B)
+        
+        # Get ARIS position via transform chain
+        positions.append(tm.get_transform("setup/ar3", "world")[:3, 3])
+    
+    # Combine with ARIS orientation from metadata
+    rotations = [
+        (R.from_matrix(tm.get_transform("setup/ar3", "world")[:3,:3]) * 
+         R.from_euler('xyz', row[['SonarRoll', 'SonarTilt', 'SonarPan']], degrees=True)
+        ).as_quat() 
+        for index, row in df_aris_metadata.iterrows()
+    ]
+    
+    df_ar3 = pd.DataFrame()
+    df_ar3['aris_frame_idx'] = df_portal_crane['aris_frame_idx']
+    df_ar3[['pos.x', 'pos.y', 'pos.z']] = np.array(positions).round(6)
+    df_ar3[['rot.x', 'rot.y', 'rot.z', 'rot.w']] = np.array(rotations).round(6)
+    
+    return df_ar3
+```
+
+This produces `ar3.csv` with ARIS pose (position + orientation) for each frame.
+
+## Exported Dataset Structure
+
+```
+data_export/
+├── recordings/
+│   ├── <target_type_1>/
+│   │   └── <recording_name>/
+│   │       ├── aris_raw/
+│   │       │   ├── 0000.pgm
+│   │       │   ├── 0001.pgm
+│   │       │   └── ...
+│   │       ├── aris_polar/
+│   │       │   ├── 0000.png
+│   │       │   ├── 0001.png
+│   │       │   └── ...
+│   │       ├── gopro/
+│   │       │   ├── 0000.jpg
+│   │       │   ├── 0001.jpg
+│   │       │   └── ...
+│   │       ├── aris_frame_meta.csv    # Per-frame ARIS metadata
+│   │       ├── aris_file_meta.yaml    # Recording-level metadata
+│   │       ├── gantry.csv              # Gantry positions per frame
+│   │       ├── ar3.csv                 # ARIS poses per frame
+│   │       └── notes.txt               # Recording notes
+│   ├── <target_type_2>/
+│   └── ...
+├── 3d_models/
+│   ├── <target_1>/
+│   │   ├── model.obj
+│   │   ├── texture.jpg
+│   │   └── ...
+│   └── ...
+├── calibration/
+│   ├── camera_matrix.yaml
+│   ├── transforms.yaml
+│   └── ...
+├── scripts/
+│   ├── prep_1_aris_extract.py
+│   ├── config.yaml
+│   └── ...
+├── README.md
+└── preview.jpg
+```
+
+## Metadata Files
+
+### aris_frame_meta.csv
+
+Contains metadata for exported frames only (subset of full `*_frames.csv`):
+
+```csv
+FrameIndex,FrameTime,PingMode,SamplesPerBeam,SonarPan,SonarTilt,SonarRoll,...
+42,1695214660450000,1,512,0.0,45.2,0.0,...
+43,1695214660517000,1,512,0.0,45.2,0.0,...
+```
+
+### gantry.csv
+
+Gantry positions synchronized to ARIS frames:
+
+```csv
+aris_frame_idx,x,y,z
+42,0.523,1.234,0.892
+43,0.524,1.235,0.892
+```
+
+### ar3.csv
+
+ARIS pose in world coordinates:
+
+```csv
+aris_frame_idx,pos.x,pos.y,pos.z,rot.x,rot.y,rot.z,rot.w
+42,0.234,0.567,1.123,0.0,0.0,0.383,0.924
+43,0.235,0.568,1.124,0.0,0.0,0.383,0.924
+```
+
+Rotation is quaternion (x, y, z, w).
+
+## Additional Resources
+
+The export script copies supporting materials:
+
+### 3D Models
+
+```python
+shutil.copytree(
+    os.path.join(data_root, '../3d_models'), 
+    model_dir,
+    dirs_exist_ok=True,
+    ignore=lambda src, names: [x for x in names if 'metashape' in x]
+)
+```
+
+Includes textured 3D models of UXO targets (excludes Metashape project files).
+
+### Calibration Data
+
+```python
+shutil.copytree(
+    os.path.join(data_root, '../calibration'),
+    calib_dir,
+    dirs_exist_ok=True
+)
+```
+
+Includes:
+- Camera intrinsics/extrinsics
+- Transform matrices between coordinate frames
+- Calibration procedures and results
+
+### Scripts
+
+```python
+shutil.copytree(
+    os.path.dirname(__file__), 
+    scripts_dir,
+    dirs_exist_ok=True,
+    ignore=lambda src, names: [x for x in names if '__pycache__' in x]
+)
+```
+
+Copies all preprocessing scripts so users can:
+- Understand how data was processed
+- Reproduce the pipeline
+- View example code for loading data
+
+## Usage
+
+```bash
+python scripts/release_1_export.py
+```
+
+Progress is shown with nested progress bars:
+```
+Exporting recordings to ../data_export
+overall: 100%|██████████| 98/98
+  20230920_aris01: 100%|██████████| 450/450
+  20230920_aris02: 100%|██████████| 423/423
+  ...
+Copying 3d models...
+Copying scripts...
+Copying calibrations...
+Tidying up...
+Done! Find your dataset at: ../data_export
+```
+
+## Skip Already Exported Recordings
+
+The script detects partially exported recordings:
+
+```python
+if os.path.isfile(gopro_file):
+    print(f' -> frame {aris_frame_idx} already exists in export, skipping rest of this recording')
+    break
+```
+
+This allows resuming interrupted exports without re-processing completed recordings.
+
+## GoPro Resolution Switching
+
+The export script automatically uses the specified resolution:
+
+```python
+if gopro_resolution and gopro_file:
+    gopro_file = re.sub(r'/clips_.+?/', '/clips_' + gopro_resolution + '/', gopro_file)
+    if gopro_file and not os.path.isfile(gopro_file):
+        raise ValueError(f'{gopro_resolution}: missing GoPro file {gopro_file}')
+```
+
+This substitutes the resolution directory (e.g., `clips_sd/` → `clips_fhd/`).
+
+## Frame Extraction from Video
+
+GoPro frames are extracted from video clips on-the-fly:
+
+```python
+gopro_frame, _ = ctx.get_gopro_frame(frametime)
+if gopro_frame is not None:
+    cv2.imwrite(os.path.join(rec_gopro, f'{aris_frame_idx:04}.{gopro_format}'), gopro_frame)
+```
+
+Frames are saved as individual JPEG or PNG files, not as video, making them easier to work with for research.
+
+## Archive Creation
+
+After export, create distribution archives:
+
+```bash
+bash scripts/release_2_archive.bash
+```
+
+<Note>
+The `release_2_archive.bash` script was not included in the source files. Typically it would create .tar.gz or .zip archives of the export directory.
+</Note>
+
+## Viewing Exported Data
+
+The repository includes a viewer script:
+
+```bash
+python scripts/view_recording.py data_export/recordings/<target_type>/<recording_name>
+```
+
+This allows stepping through synchronized frames with arrow keys.
+
+## Data Validation
+
+After export, verify:
+
+<AccordionGroup>
+  <Accordion title="Frame counts match">
+    Check that ARIS, GoPro, and metadata have the same number of entries:
+    ```bash
+    ls data_export/recordings/<type>/<name>/aris_raw/ | wc -l
+    ls data_export/recordings/<type>/<name>/gopro/ | wc -l
+    wc -l data_export/recordings/<type>/<name>/gantry.csv
+    ```
+  </Accordion>
+  
+  <Accordion title="No missing frames">
+    Verify sequential numbering:
+    ```python
+    import os
+    frames = sorted(os.listdir('aris_raw/'))
+    expected = [f'{i:04}.pgm' for i in range(len(frames))]
+    assert frames == expected
+    ```
+  </Accordion>
+  
+  <Accordion title="Timestamps are monotonic">
+    Check that timestamps increase:
+    ```python
+    import pandas as pd
+    df = pd.read_csv('gantry.csv')
+    assert df['aris_frame_idx'].is_monotonic_increasing
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Performance Tips
+
+- **Export is I/O bound**: Use SSD for faster file copying
+- **GoPro frame extraction**: Most time-consuming step due to video decoding
+- **Parallel export**: Not currently supported, but could process recordings in parallel
+- **Incremental export**: Uses frame existence checking to resume interrupted runs
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="KeyError in matches.csv">
+    Verify the matches file has required columns:
+    - `aris_file`, `gantry_file`, `gopro_file`
+    - `aris_onset`, `gopro_offset`, `gantry_offset`
+    - `notes`
+  </Accordion>
+  
+  <Accordion title="Missing GoPro file for resolution">
+    Ensure you ran `prep_8_gopro_downsample.bash` for the target resolution:
+    ```bash
+    ls data_processed/gopro/clips_fhd/  # Check files exist
+    ```
+  </Accordion>
+  
+  <Accordion title="Transform calculation fails">
+    Check that calibration files are present:
+    ```bash
+    ls ../calibration/
+    ```
+    
+    Verify transform manager can load calibration data.
+  </Accordion>
+</AccordionGroup>
+
+## Final Dataset Distribution
+
+The UXO Dataset 2024 is publicly available at:
+- **Zenodo**: [https://zenodo.org/records/13778485](https://zenodo.org/records/13778485)
+- **GitHub**: [https://github.com/dfki-ric/uxo-dataset2024](https://github.com/dfki-ric/uxo-dataset2024)
+
+The exported dataset includes:
+- 100 trajectories
+- 74,000+ frames
+- 3 distinct UXO types
+- Multimodal synchronized data (sonar, camera, trajectory)
+- Calibration matrices and 3D models
+
+## Citation
+
+When using the dataset, please cite:
+
+```bibtex
+@INPROCEEDINGS{dahn2024uxo,
+  author={Dahn, Nikolas and Firvida, Miguel Bande and Sharma, Proneet and Christensen, Leif and Geisle, Oliver and Mohrmann, Jochen and Frey, Torsten and Kumar Sanghamreddy, Prithvi and Kirchner, Frank},
+  title={An Acoustic and Optical Dataset for the Perception of Underwater Unexploded Ordnance (UXO)}, 
+  booktitle={OCEANS 2024 - Halifax}, 
+  year={2024},
+  doi={10.1109/OCEANS55160.2024.10754316}
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Pipeline Overview" icon="diagram-project" href="./overview">
+    Review the complete preprocessing pipeline
+  </Card>
+  <Card title="View Recording Script" icon="play" href="../usage/viewing-data">
+    Learn how to view exported recordings
+  </Card>
+</CardGroup>

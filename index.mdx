@@ -1,97 +1,89 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "UXO Dataset 2024"
+description: "An acoustic and optical dataset for the perception of underwater unexploded ordnance (UXO)"
 ---
 
-## Setting up
+<div className="p-8 rounded-lg" style={{ background: 'linear-gradient(135deg, #377cc7 0%, #6380bc 100%)' }}>
+  <h1 className="text-4xl font-bold mb-4" style={{ color: '#ffffff' }}>
+    UXO Dataset 2024
+  </h1>
+  <p className="text-xl mb-6" style={{ color: '#f0f5fa' }}>
+    Multimodal underwater unexploded ordnance perception dataset with acoustic sonar and optical camera data
+  </p>
+</div>
 
-Get your documentation site up and running in minutes.
+## About the Dataset
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+During the 20th century, millions of tons of munition were dumped into the oceans worldwide. After decades of decay, these unexploded ordnance (UXO) are causing significant problems. This dataset facilitates more efficient salvage efforts through autonomous underwater vehicles by providing representative multimodal data for acoustic and optical sensing of UXO underwater.
 
-## Make it yours
+The dataset includes close to 100 trajectories and over 74,000 frames of 3 distinct types of UXO recorded in a controlled environment using:
 
-Design a docs site that looks great and empowers your users.
+- **ARIS Explorer 3000** imaging sonar
+- **GoPro Hero 8** camera
+- Custom-designed gantry crane for precise positioning
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Access the Dataset" icon="database" href="/getting-started/access">
+    Download the dataset from Zenodo
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="View Data" icon="eye" href="/getting-started/viewing-data">
+    Learn how to visualize synchronized recordings
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Dataset Structure" icon="folder-tree" href="/structure/overview">
+    Understand the data organization and formats
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Processing Pipeline" icon="gears" href="/processing/overview">
+    Explore the preprocessing and export tools
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## Key Features
 
-Everything you need to create world-class documentation.
+<CardGroup cols={3}>
+  <Card title="Multimodal Data" icon="wave-pulse">
+    Synchronized ARIS sonar scans with matched GoPro footage
+  </Card>
+  <Card title="Accurate Transforms" icon="ruler">
+    Precise calibration matrices between sensors and targets
+  </Card>
+  <Card title="3D Models" icon="cube">
+    Textured 3D models of UXO targets included
+  </Card>
+  <Card title="Annotations" icon="tags">
+    Labeled camera frames with bounding boxes
+  </Card>
+  <Card title="Processing Tools" icon="code">
+    Complete preprocessing and export scripts
+  </Card>
+  <Card title="Open Access" icon="lock-open">
+    Publicly available for research use
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Dataset Properties
 
-## Need inspiration?
+- Sonar scans of multiple UXO using ARIS Explorer 3000 imaging sonar
+- Matched GoPro UHD frames for most sonar frames  
+- Labels for GoPro frames (multiply coordinates by 3)
+- Known and accurate transforms between sonar and targets
+- Known details of UXO targets including munition types, dimensions, and 3D models
+- Tracked scan trajectories typical and achievable for non-experimental environments
+- Publicly available at [https://zenodo.org/records/13778485](https://zenodo.org/records/13778485)
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
+## Citation
+
+When using this dataset or the processing code, please cite:
+
+```bibtex
+@INPROCEEDINGS{dahn2024uxo,
+  author={Dahn, Nikolas and Firvida, Miguel Bande and Sharma, Proneet and Christensen, Leif and Geisle, Oliver and Mohrmann, Jochen and Frey, Torsten and Kumar Sanghamreddy, Prithvi and Kirchner, Frank},
+  title={An Acoustic and Optical Dataset for the Perception of Underwater Unexploded Ordnance (UXO)}, 
+  booktitle={OCEANS 2024 - Halifax}, 
+  year={2024},
+  doi={10.1109/OCEANS55160.2024.10754316}
+}
+```
+
+<Card title="Read the Paper" icon="file-pdf" href="https://www.researchgate.net/publication/386124306_An_Acoustic_and_Optical_Dataset_for_the_Perception_of_Underwater_Unexploded_Ordnance_UXO">
+  View the full research paper on ResearchGate
 </Card>

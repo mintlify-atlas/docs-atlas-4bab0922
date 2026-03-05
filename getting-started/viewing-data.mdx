@@ -1,0 +1,251 @@
+---
+title: Viewing the Data
+description: Use the interactive viewer to explore synchronized sonar and camera data
+---
+
+The UXO Dataset 2024 includes a convenient viewer script that allows you to step through recordings and visualize synchronized sonar, camera, and trajectory data.
+
+## The Dataset Viewer
+
+The `view_recording.py` script provides an interactive Qt-based GUI for exploring the dataset. It displays:
+
+- ARIS sonar frames (raw or polar-transformed)
+- Synchronized GoPro camera frames
+- Gantry trajectory and pose information
+- Frame and file metadata
+- Recording notes
+
+## Basic Usage
+
+To view a recording, use the following command:
+
+```bash
+python scripts/view_recording.py data_export/recordings/<target_type>/<recording-folder>
+```
+
+### Example
+
+```bash
+python scripts/view_recording.py data_export/recordings/mine_type_1/recording_001
+```
+
+<Note>
+Replace `<target_type>` and `<recording-folder>` with the actual paths from your downloaded dataset.
+</Note>
+
+## Command-Line Options
+
+The viewer supports several command-line arguments to customize the display:
+
+<ParamField path="recording_dir" type="string" required>
+  Path to the recording directory to view
+</ParamField>
+
+<ParamField path="-p, --polar" type="boolean" default="true">
+  Display polar-transformed sonar images instead of raw sonar data. Use `--no-polar` to view raw frames.
+</ParamField>
+
+<ParamField path="-c, --colorize" type="boolean" default="true">
+  Apply colormap to sonar images for better visualization. Use `--no-colorize` for grayscale.
+</ParamField>
+
+<ParamField path="-l, --use-lru-cache" type="boolean" default="false">
+  Enable LRU caching to speed up navigation by keeping frames in memory. Useful for repeated viewing.
+</ParamField>
+
+### Usage Examples
+
+<CodeGroup>
+  ```bash Default (polar, colorized)
+  python scripts/view_recording.py data_export/recordings/mine_type_1/recording_001
+  ```
+
+  ```bash Raw sonar frames
+  python scripts/view_recording.py data_export/recordings/mine_type_1/recording_001 --no-polar
+  ```
+
+  ```bash Grayscale display
+  python scripts/view_recording.py data_export/recordings/mine_type_1/recording_001 --no-colorize
+  ```
+
+  ```bash With caching enabled
+  python scripts/view_recording.py data_export/recordings/mine_type_1/recording_001 --use-lru-cache
+  ```
+</CodeGroup>
+
+## Viewer Interface
+
+The viewer window is divided into several sections:
+
+<Steps>
+  <Step title="Sonar Display (Left)">
+    Shows the ARIS sonar frame for the current position. By default, displays polar-transformed images with a colormap applied (TWILIGHT_SHIFTED).
+  </Step>
+
+  <Step title="Camera Display (Top Right)">
+    Shows the synchronized GoPro camera frame corresponding to the current sonar frame.
+  </Step>
+
+  <Step title="Position Information">
+    Displays the current frame index and position in the recording (e.g., "Frame 42 (1 / 150)").
+  </Step>
+
+  <Step title="Trajectory Information">
+    Shows gantry crane position data including transforms between sonar and targets.
+  </Step>
+
+  <Step title="Metadata Panels (Bottom)">
+    Three information boxes display:
+    - **Notes**: Recording-specific notes from `notes.txt`
+    - **File Metadata**: Recording-level ARIS configuration from `aris_file_meta.yaml`
+    - **Frame Metadata**: Per-frame ARIS parameters from `aris_frame_meta.csv`
+  </Step>
+</Steps>
+
+## Keyboard Controls
+
+Navigate through the recording using keyboard shortcuts:
+
+<ResponseField name="Arrow Keys" type="navigation">
+  <Expandable title="Navigation controls">
+    - **Right Arrow**: Next frame (+1)
+    - **Left Arrow**: Previous frame (-1)
+    - **Up Arrow**: Jump forward (+10 frames)
+    - **Down Arrow**: Jump backward (-10 frames)
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="Q" type="action">
+  Quit the viewer
+</ResponseField>
+
+<Tip>
+You can also use the slider at the bottom of the window to jump to specific frames directly.
+</Tip>
+
+## Understanding the Display
+
+### Sonar Visualization
+
+The ARIS sonar data can be displayed in two formats:
+
+<Tabs>
+  <Tab title="Polar Transformed (Default)">
+    Polar-transformed images represent what the sonar was actually "seeing" - the acoustic image projected into a 2D plane. This format is more intuitive for human interpretation.
+
+    - Resolution: 1000 pixels per meter (configurable)
+    - Format: PNG with compression
+    - Colormap: TWILIGHT_SHIFTED (can be disabled with `--no-colorize`)
+  </Tab>
+
+  <Tab title="Raw Format">
+    Raw sonar frames show the original beam-intensity data from the ARIS 3000.
+
+    - Format: PGM (Portable GrayMap)
+    - Beams are ordered right to left in the original data
+    - The viewer automatically flips raw frames for correct orientation
+  </Tab>
+</Tabs>
+
+### Camera Frames
+
+<Warning>
+GoPro frame label coordinates should be multiplied by 3 for correct scaling due to the downsampling process.
+</Warning>
+
+The GoPro frames are:
+- Extracted from UHD (5.3K) source footage
+- Downsampled to Full HD (1920x1080) for export
+- Synchronized with sonar frames via motion matching
+- Saved as individual JPEG files indexed by ARIS frame number
+
+### Trajectory Data
+
+The gantry information panel shows:
+- Position and orientation of the gantry crane
+- Accurate transforms between sonar and UXO targets
+- Timestamps synchronized with ARIS frame indices
+
+## Advanced Usage
+
+### Enabling Frame Caching
+
+For faster navigation when repeatedly viewing the same frames:
+
+```bash
+python scripts/view_recording.py data_export/recordings/mine_type_1/recording_001 --use-lru-cache
+```
+
+This uses Python's LRU (Least Recently Used) cache to keep frames in memory.
+
+<Note>
+Caching increases memory usage but significantly improves performance when jumping back and forth between frames.
+</Note>
+
+### Viewing Multiple Recordings
+
+To compare different recordings, open multiple viewer instances:
+
+```bash
+# Terminal 1
+python scripts/view_recording.py data_export/recordings/mine_type_1/recording_001
+
+# Terminal 2
+python scripts/view_recording.py data_export/recordings/mine_type_1/recording_002
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Viewer won't start">
+    Ensure PyQt5 is properly installed:
+
+    ```bash
+    pip install PyQt5
+    ```
+
+    On Linux, you may need system dependencies:
+
+    ```bash
+    sudo apt-get install python3-pyqt5
+    ```
+  </Accordion>
+
+  <Accordion title="Images not loading">
+    Verify the recording directory structure:
+
+    ```bash
+    ls data_export/recordings/<target_type>/<recording-folder>/
+    ```
+
+    Required directories:
+    - `aris_polar/` or `aris_raw/`
+    - `gopro/`
+    - `gantry.csv`
+    - `aris_frame_meta.csv`
+    - `aris_file_meta.yaml`
+  </Accordion>
+
+  <Accordion title="GoPro frames missing">
+    Some recordings may not have complete GoPro coverage. The viewer will display sonar data even if camera frames are unavailable for certain indices.
+  </Accordion>
+
+  <Accordion title="Colormap issues">
+    If the colormap appears incorrect, try viewing without colorization:
+
+    ```bash
+    python scripts/view_recording.py <recording-folder> --no-colorize
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Dataset Structure" icon="folder" href="/structure/overview">
+    Learn about the organization and file formats
+  </Card>
+  <Card title="Processing Scripts" icon="code" href="/processing/overview">
+    Explore the preprocessing pipeline
+  </Card>
+</CardGroup>

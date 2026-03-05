@@ -1,0 +1,89 @@
+---
+title: Introduction
+description: An acoustic and optical dataset for the perception of underwater unexploded ordnance (UXO)
+---
+
+## Overview
+
+The UXO Dataset 2024 is a comprehensive multimodal dataset for acoustic and optical sensing of unexploded ordnance (UXO) underwater. It provides synchronized data from an ARIS 3000 imaging sonar and a GoPro Hero 8 camera, recorded in a controlled experimental environment.
+
+<img src="/media/teaser_montage_h.png" alt="UXO Dataset Montage" />
+
+## The UXO Problem
+
+During the 20th century, millions of tons of munition were dumped into the oceans worldwide. After decades of decay, the problems these unexploded ordnance (UXO) are causing are starting to become apparent. 
+
+<Note>
+In order to facilitate more efficient salvage efforts through autonomous underwater vehicles (AUVs), access to representative data is paramount. However, until now, such data has not been publicly available.
+</Note>
+
+## Dataset Purpose
+
+This dataset is designed to:
+
+<CardGroup cols={2}>
+  <Card title="Enable Research" icon="microscope">
+    Support research in acoustic and optical perception of UXO underwater
+  </Card>
+  <Card title="Facilitate AUV Development" icon="robot">
+    Provide data for developing autonomous salvage systems
+  </Card>
+  <Card title="Provide Ground Truth" icon="crosshairs">
+    Include known and accurate transforms between sensors and targets
+  </Card>
+  <Card title="Open Access" icon="unlock">
+    Publicly available data for the research community
+  </Card>
+</CardGroup>
+
+## Recording Setup
+
+The dataset was recorded using a custom-designed gantry crane system in a controlled underwater environment. This setup allowed for precise, repeatable trajectories while maintaining accurate position tracking.
+
+<img src="/media/aris_setup_labeled.jpg" alt="Recording Setup" />
+
+### Equipment
+
+**ARIS Explorer 3000 Imaging Sonar**
+- High-resolution acoustic imaging
+- Precise frame-by-frame sonar data
+- Accurate metadata for each scan
+
+**GoPro Hero 8**
+- Ultra HD (5.3k, 5312x2988) video recording
+- Synchronized with sonar frames
+- Multiple resolution options available
+
+**Custom Gantry Crane**
+- Controlled trajectory execution
+- Precise position tracking via ROS
+- Repeatable motion patterns
+
+## Key Statistics
+
+<CardGroup cols={2}>
+  <Card title="Trajectories" icon="route">
+    Close to 100 recorded trajectories
+  </Card>
+  <Card title="Frames" icon="images">
+    Over 74,000 frames captured
+  </Card>
+  <Card title="UXO Types" icon="bomb">
+    3 distinct types of UXO
+  </Card>
+  <Card title="Data Types" icon="database">
+    Multimodal: sonar, optical, pose, 3D models
+  </Card>
+</CardGroup>
+
+## Access
+
+The dataset is publicly available and can be accessed at:
+
+- **Dataset Repository**: [Zenodo](https://zenodo.org/records/13778485)
+- **Code Repository**: [GitHub](https://github.com/dfki-ric/uxo-dataset2024)
+- **Research Paper**: [ResearchGate](https://www.researchgate.net/publication/386124306_An_Acoustic_and_Optical_Dataset_for_the_Perception_of_Underwater_Unexploded_Ordnance_UXO)
+
+<Info>
+This dataset is intended for research purposes and was recorded in a controlled experimental environment.
+</Info>

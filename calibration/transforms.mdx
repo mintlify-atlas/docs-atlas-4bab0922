@@ -1,0 +1,317 @@
+---
+title: 'Transform Hierarchy'
+description: 'Spatial transforms defining coordinate frames for sensors and targets'
+---
+
+## Overview
+
+The UXO Dataset uses a hierarchical transform system to define spatial relationships between coordinate frames. The transform tree consists of two main groups:
+
+- **Setup transforms**: Define the sensor mounting configuration (AR3 robot arm, ARIS sonar, GoPro camera)
+- **Target transforms**: Define the positions of UXO objects in the world frame
+
+All transforms are stored in `/calibration/transforms.yaml` and can be loaded programmatically using the transform manager.
+
+## Transform Representation
+
+Each transform consists of:
+- **Translation**: 3D position offset (x, y, z) in meters
+- **Rotation**: Quaternion (x, y, z, w) representing orientation
+
+Transforms are defined relative to a parent frame, creating a hierarchical tree structure.
+
+## Setup Transform Hierarchy
+
+The sensor setup follows this frame hierarchy:
+
+```
+setup/portal_crane
+└── setup/ar3
+    ├── setup/aris
+    │   └── setup/sonar
+    ├── setup/gopro_mounting_hole
+    │   └── setup/gopro_mounting_axis
+    │       └── setup/camera
+```
+
+### Portal Crane to AR3 Robot
+
+<ParamField path="setup/ar3" type="transform">
+  Defines the AR3 robot arm base relative to the portal crane frame.
+</ParamField>
+
+```yaml
+frame_id: "setup/ar3"
+parent_frame_id: "setup/portal_crane"
+translation:
+  x: 0.0
+  y: 0.174
+  z: -0.338
+rotation:
+  x: 0.0
+  y: 1.0
+  z: 0.0
+  w: 0.0
+```
+
+The AR3 is offset 17.4 cm in Y and -33.8 cm in Z from the portal crane, with a 180° rotation around the Y-axis.
+
+### AR3 to ARIS Sonar
+
+<Tabs>
+  <Tab title="ARIS Base Frame">
+    ```yaml
+    frame_id: "setup/aris"
+    parent_frame_id: "setup/ar3"
+    translation:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    rotation:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      w: 1.0
+    ```
+    The ARIS base frame is coincident with the AR3 end-effector.
+  </Tab>
+  <Tab title="Sonar Imaging Frame">
+    ```yaml
+    frame_id: "setup/sonar"
+    parent_frame_id: "setup/aris"
+    translation:
+      x: -0.108725
+      y: 0.0
+      z: 0.0
+    rotation:
+      x: 0.5
+      y: 0.5
+      z: 0.5
+      w: 0.5
+    ```
+    The sonar imaging frame is offset -10.87 cm in X with a compound rotation.
+  </Tab>
+</Tabs>
+
+### AR3 to GoPro Camera
+
+The GoPro camera mount has an intermediate frame hierarchy:
+
+<Accordion title="GoPro Mounting Hole Frame">
+  ```yaml
+  frame_id: "setup/gopro_mounting_hole"
+  parent_frame_id: "setup/ar3"
+  translation:
+    x: 0.1265
+    y: 0.023
+    z: -0.1055
+  rotation:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    w: 1.0
+  ```
+  Reference point for the GoPro mounting bracket.
+</Accordion>
+
+<Accordion title="GoPro Mounting Axis Frame">
+  ```yaml
+  frame_id: "setup/gopro_mounting_axis"
+  parent_frame_id: "setup/gopro_mounting_hole"
+  translation:
+    x: 0.02125
+    y: 0.0
+    z: -0.0075
+  rotation:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    w: 1.0
+  ```
+  Intermediate frame for mounting axis adjustments.
+</Accordion>
+
+<Accordion title="Camera Optical Frame">
+  ```yaml
+  frame_id: "setup/camera"
+  parent_frame_id: "setup/gopro_mounting_axis"
+  translation:
+    x: 0.01925
+    y: -0.0195
+    z: -0.0415
+  rotation:
+    x: 0.5
+    y: 0.5
+    z: 0.5
+    w: 0.5
+  ```
+  Final camera optical center frame with standard camera orientation.
+</Accordion>
+
+## Target Transforms
+
+All target objects are positioned relative to the `world` frame. The dataset includes five UXO targets:
+
+<Tabs>
+  <Tab title="100lbs Bomb">
+    ```yaml
+    frame_id: "target/100lbs"
+    parent_frame_id: "world"
+    translation:
+      x: 1.251079
+      y: 1.592704
+      z: -1.489828
+    rotation:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      w: 1.0
+    ```
+    Position: (1.25m, 1.59m, -1.49m)
+  </Tab>
+  <Tab title="Mortar Shell">
+    ```yaml
+    frame_id: "target/mortar_shell"
+    parent_frame_id: "world"
+    translation:
+      x: 1.263516
+      y: 1.4371
+      z: -1.51891
+    rotation:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      w: 1.0
+    ```
+    Position: (1.26m, 1.44m, -1.52m)
+  </Tab>
+  <Tab title="Incendiary">
+    ```yaml
+    frame_id: "target/incendiary"
+    parent_frame_id: "world"
+    translation:
+      x: 1.2351
+      y: 1.409233
+      z: -1.530784
+    rotation:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      w: 1.0
+    ```
+    Position: (1.24m, 1.41m, -1.53m)
+  </Tab>
+  <Tab title="Cylinder">
+    ```yaml
+    frame_id: "target/cylinder"
+    parent_frame_id: "world"
+    translation:
+      x: 1.277832
+      y: 1.399541
+      z: -1.461439
+    rotation:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      w: 1.0
+    ```
+    Position: (1.28m, 1.40m, -1.46m)
+  </Tab>
+  <Tab title="100lbs Floor">
+    ```yaml
+    frame_id: "target/100lbs_floor"
+    parent_frame_id: "world"
+    translation:
+      x: 1.174003
+      y: 1.227536
+      z: -2.2411
+    rotation:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      w: 1.0
+    ```
+    Position: (1.17m, 1.23m, -2.24m) - on the pool floor
+  </Tab>
+</Tabs>
+
+## Using the Transform Manager
+
+The dataset provides a Python utility to load and work with transforms using the `pytransform3d` library.
+
+### Loading Transforms
+
+```python demo/transforms.py
+import numpy as np
+from pytransform3d.transform_manager import TransformManager
+from demo.transforms import get_tf_manager
+
+# Load the complete transform tree
+tm = get_tf_manager()
+```
+
+### Computing Transforms
+
+The transform manager automatically computes transformations between any two frames:
+
+```python
+# Get transform from camera to a target
+camera_to_target = tm.get_transform("setup/camera", "target/100lbs")
+
+# Get transform from sonar to a target
+sonar_to_target = tm.get_transform("setup/sonar", "target/mortar_shell")
+
+# Get transform between sensors
+camera_to_sonar = tm.get_transform("setup/camera", "setup/sonar")
+```
+
+### Transform Format
+
+Transforms are represented as 4x4 homogeneous transformation matrices:
+
+```python
+# Transform matrix structure
+# [[R11, R12, R13, tx],
+#  [R21, R22, R23, ty],
+#  [R31, R32, R33, tz],
+#  [  0,   0,   0,  1]]
+```
+
+Where the 3x3 rotation matrix is in the upper-left, and the translation vector is in the right column.
+
+### Internal Implementation
+
+The transform loading process (from `/workspace/source/demo/transforms.py:22-28`):
+
+```python
+for tf in tf_statics[object]:
+    transform = pt.transform_from_pq(
+                    np.hstack((
+                        np.array([tf['translation']['x'], tf['translation']['y'], tf['translation']['z']]), 
+                        np.array([tf['rotation']['w'], tf['rotation']['x'], tf['rotation']['y'], tf['rotation']['z']]))))
+    
+    tm.add_transform(tf['frame_id'], tf['parent_frame_id'], transform)
+```
+
+<Note>
+  The quaternion order in the YAML file is (x, y, z, w), but `pytransform3d` expects (w, x, y, z) format.
+</Note>
+
+## Coordinate Frame Conventions
+
+- **World Frame**: Fixed reference frame, typically aligned with the pool structure
+- **Setup Frames**: Moving frames attached to the robotic system
+- **Camera Frame**: Follows standard computer vision convention (Z-forward, X-right, Y-down)
+- **Sonar Frame**: Aligned with the ARIS imaging plane
+
+## File Location
+
+The transforms are stored in:
+```
+/calibration/transforms.yaml
+```
+
+The Python loader utility is located at:
+```
+/demo/transforms.py
+```

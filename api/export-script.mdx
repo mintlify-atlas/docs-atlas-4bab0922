@@ -1,0 +1,295 @@
+---
+title: 'release_1_export.py'
+description: 'Export script for preparing the UXO Dataset 2024 release'
+---
+
+## Overview
+
+The `release_1_export.py` script is the main export utility for preparing the UXO Dataset 2024 release. It processes matched recordings, exports synchronized ARIS sonar and GoPro imagery, calculates coordinate transformations, and packages everything into the final dataset structure.
+
+## Command-Line Usage
+
+```bash
+python release_1_export.py
+```
+
+<Note>
+  This script reads all configuration from `config.yaml`. No command-line arguments are accepted.
+</Note>
+
+## Configuration
+
+The script uses the following configuration options from `config.yaml`:
+
+### Export Settings
+
+<ParamField path="match_file" type="string" required>
+  Path to the CSV file containing matched recordings with timing offsets.
+  
+  **Default:** `"../data_processed/matches.csv"`
+</ParamField>
+
+<ParamField path="export_dir" type="string" required>
+  Output directory for the exported dataset.
+  
+  **Default:** `"../data_export"`
+</ParamField>
+
+<ParamField path="aris_to_polar_image_format" type="string" required>
+  Image format for polar-transformed ARIS frames. Options: `png`, `pgm`
+  
+  **Default:** `"png"`
+</ParamField>
+
+<ParamField path="export_gopro_resolution" type="string">
+  GoPro resolution to include in export. Only one resolution can be selected.
+  
+  **Options:** `"uhd"` (5312x2988), `"fhd"` (1920x1080), `"sd"` (640x360)
+  
+  **Default:** `"fhd"`
+</ParamField>
+
+<ParamField path="export_gopro_format" type="string">
+  File format for exported GoPro frames.
+  
+  **Default:** `"jpg"`
+</ParamField>
+
+<ParamField path="export_only_with_gopro" type="boolean">
+  If true, only export frame ranges where both sonar and GoPro footage overlap.
+  
+  **Default:** `true`
+</ParamField>
+
+### Example Configuration
+
+```yaml config.yaml
+# release_1_export.py
+# -------------------
+# Where to save the dataset when exporting.
+export_dir: "../data_export"
+
+# Gopro resolution to include when exporting (only one can be selected).
+export_gopro_resolution: "fhd"
+
+# File format of the exported gopro frames (each frame is exported individually).
+export_gopro_format: "jpg"
+
+# If True, only export the frame range where gopro and sonar footage is overlapping.
+export_only_with_gopro: True
+
+# Required from other sections
+aris_to_polar_image_format: png
+match_file: "../data_processed/matches.csv"
+```
+
+## export_recording Function
+
+The core function that exports a single recording.
+
+### Signature
+
+```python
+def export_recording(
+    match: pd.Series,
+    data_root: str,
+    out_dir_root: str,
+    aris_polar_img_format: str = 'png',
+    gopro_resolution: str = 'fhd',
+    gopro_format: str = 'jpg',
+    trim_from_gopro: bool = True
+) -> None:
+```
+
+### Parameters
+
+<ParamField path="match" type="pd.Series" required>
+  A row from the matches CSV containing:
+  - `aris_file`: Path to ARIS recording directory
+  - `gantry_file`: Path to gantry CSV file
+  - `gopro_file`: Path to GoPro video file
+  - `aris_onset`: Start frame index for ARIS
+  - `gopro_offset`: Time offset for GoPro synchronization
+  - `gantry_offset`: Time offset for gantry data
+  - `notes`: Recording notes (used to determine target type)
+</ParamField>
+
+<ParamField path="data_root" type="str" required>
+  Root directory containing the source data files
+</ParamField>
+
+<ParamField path="out_dir_root" type="str" required>
+  Root directory for exported recordings
+</ParamField>
+
+<ParamField path="aris_polar_img_format" type="str" default="'png'">
+  Image format for polar ARIS frames
+</ParamField>
+
+<ParamField path="gopro_resolution" type="str" default="'fhd'">
+  GoPro resolution to export
+</ParamField>
+
+<ParamField path="gopro_format" type="str" default="'jpg'">
+  Image format for exported GoPro frames
+</ParamField>
+
+<ParamField path="trim_from_gopro" type="bool" default="True">
+  Whether to trim recording to frames with valid GoPro footage
+</ParamField>
+
+### Behavior
+
+The function performs the following operations:
+
+1. **Load Recording Data**: Creates a `MatchingContext` with timing offsets
+2. **Create Output Structure**: Organizes by target type (extracted from notes)
+3. **Export Frames**: 
+   - Copies raw ARIS frames (PGM format)
+   - Copies polar ARIS frames (PNG or PGM)
+   - Extracts and saves GoPro frames as individual images
+4. **Export Metadata**:
+   - `gantry.csv`: Gantry position (x, y, z) per frame
+   - `ar3.csv`: AR3 robot position and orientation in world coordinates
+   - `aris_frame_meta.csv`: Per-frame ARIS metadata
+   - `aris_file_meta.yaml`: File-level ARIS metadata
+   - `notes.txt`: Recording notes
+
+<Note>
+  If a frame already exists in the export directory, the script skips the rest of that recording to avoid overwriting.
+</Note>
+
+## Output Structure
+
+The script creates the following directory structure:
+
+```
+export_dir/
+├── recordings/
+│   ├── <target_type>/          # e.g., barrel, cylinder, sphere
+│   │   └── <recording_name>/
+│   │       ├── aris_raw/       # Raw ARIS frames (PGM)
+│   │       ├── aris_polar/     # Polar ARIS frames (PNG/PGM)
+│   │       ├── gopro/          # GoPro frames (JPG)
+│   │       ├── gantry.csv
+│   │       ├── ar3.csv
+│   │       ├── aris_frame_meta.csv
+│   │       ├── aris_file_meta.yaml
+│   │       └── notes.txt
+├── 3d_models/                  # Target 3D models
+├── scripts/                    # Dataset scripts
+├── calibration/                # Calibration data
+├── README.md
+└── preview.jpg
+```
+
+## Target Type Detection
+
+Target types are automatically extracted from the recording notes using the `get_target_type()` function:
+
+```python
+def get_target_type(notes: str) -> str:
+    """Extracts target type from notes.
+    
+    Looks for lines containing 'target:' and returns the value.
+    Spaces are converted to underscores and text is lowercased.
+    
+    Returns 'other' if no target type is found.
+    """
+```
+
+### Example Notes Format
+
+```text
+Target: Steel Barrel
+Orientation: Vertical
+Distance: 3.5m
+```
+
+This would be categorized as `steel_barrel` in the output structure.
+
+## Coordinate Transformations
+
+The script calculates AR3 robot arm pose in world coordinates using the transform chain:
+
+```
+world → portal_crane → AR3 → ARIS sensor
+```
+
+The `_create_ar3_df()` function:
+1. Loads the transform manager from calibration data
+2. Applies gantry position (x, y, z) to update portal crane transform
+3. Calculates AR3 position in world coordinates
+4. Combines with ARIS orientation (roll, tilt, pan) for final pose
+5. Outputs quaternion rotation (x, y, z, w)
+
+### AR3 Output Format
+
+The `ar3.csv` file contains:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `aris_frame_idx` | int | Frame index |
+| `pos.x`, `pos.y`, `pos.z` | float | Position in meters (6 decimal precision) |
+| `rot.x`, `rot.y`, `rot.z`, `rot.w` | float | Quaternion rotation (6 decimal precision) |
+
+## Additional Export Operations
+
+After exporting all recordings, the script copies:
+
+1. **3D Models**: Target mesh files (excludes Metashape projects)
+2. **Scripts**: All Python scripts (excludes `__pycache__`)
+3. **Calibration**: Camera and sensor calibration data
+4. **Documentation**: README and preview image
+
+## Usage Example
+
+<CodeGroup>
+
+```bash Full Export
+# Configure settings in config.yaml, then run:
+python release_1_export.py
+```
+
+```yaml Typical Configuration
+match_file: "../data_processed/matches.csv"
+export_dir: "../data_export"
+aris_to_polar_image_format: png
+export_gopro_resolution: "fhd"
+export_gopro_format: "jpg"
+export_only_with_gopro: True
+```
+
+</CodeGroup>
+
+## Progress Tracking
+
+The script uses `tqdm` progress bars to show:
+- Overall progress across all recordings
+- Per-recording frame export progress with recording name
+
+## Error Handling
+
+<Warning>
+  The script will raise a `ValueError` if the specified GoPro resolution file is not found. Ensure all resolution variants are available before exporting.
+</Warning>
+
+<Note>
+  If `export_only_with_gopro` is enabled and footage is trimmed, the script prints a message showing the actual exported frame range.
+</Note>
+
+## Dependencies
+
+Required Python packages:
+- `pandas` - Data handling and CSV operations
+- `numpy` - Numerical operations
+- `scipy` - Rotation transformations
+- `opencv-python` (cv2) - Image I/O
+- `PyYAML` - Configuration parsing
+- `tqdm` - Progress bars
+
+Custom modules:
+- `common.config` - Configuration loading
+- `common.aris_definitions` - ARIS metadata definitions
+- `common.matching_context` - Recording data access
+- `dataset.calibration.tf_demo.transforms` - Coordinate transforms

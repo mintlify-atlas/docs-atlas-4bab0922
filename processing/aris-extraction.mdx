@@ -1,0 +1,337 @@
+---
+title: ARIS Extraction
+description: Extract and transform ARIS Explorer 3000 sonar data
+---
+
+The ARIS (Adaptive Resolution Imaging Sonar) Explorer 3000 records data in a proprietary `.aris` file format. These scripts extract individual frames, transform them to human-readable polar images, and calculate optical flow for motion detection.
+
+## Pipeline Stages
+
+ARIS processing consists of three automated scripts plus one GUI tool:
+
+1. **prep_1_aris_extract.py** - Extract frames and metadata
+2. **prep_2_aris_to_polar.py** - Transform to polar coordinates
+3. **prep_3_aris_calc_optical_flow.py** - Calculate optical flow
+4. **prep_4_aris_find_offsets.py** - Mark motion boundaries (GUI)
+
+## Step 1: Frame Extraction (prep_1_aris_extract.py)
+
+### Purpose
+
+Extracts individual sonar frames and metadata from `.aris` binary files. Uses the ARIS Integration SDK definitions ported to Python.
+
+### What It Does
+
+- Reads proprietary `.aris` file format
+- Validates file and frame headers (version 0x05464444)
+- Extracts each frame as a `.pgm` (Portable Gray Map) image
+- Exports frame metadata to CSV
+- Saves file-level metadata to YAML
+
+### Configuration
+
+```yaml config.yaml
+aris_input: "../data_raw/aris"          # Location of .aris files
+aris_extract: "../data_processed/aris"  # Output directory
+```
+
+### Usage
+
+```bash
+python scripts/prep_1_aris_extract.py
+```
+
+### Output Structure
+
+```
+aris_extract/
+└── <recording_name>/
+    ├── 0000.pgm              # Frame 0 (4-digit padding)
+    ├── 0001.pgm              # Frame 1
+    ├── ...
+    ├── <name>_frames.csv     # All frame metadata
+    └── <name>_metadata.yaml  # File-level metadata
+```
+
+### Frame Metadata Fields
+
+The `*_frames.csv` file contains critical metadata for each frame:
+
+- `FrameIndex` - Sequential frame number
+- `FrameTime` - Microsecond timestamp
+- `PingMode` - Beam count (64 or 128 beams)
+- `SamplesPerBeam` - Number of range bins per beam
+- `SampleStartDelay` - Start of acoustic window (microseconds)
+- `SamplePeriod` - Time between samples (microseconds)
+- `SoundSpeed` - Speed of sound in water (m/s)
+- `SonarPan`, `SonarTilt`, `SonarRoll` - Orientation angles
+
+## Step 2: Polar Transformation (prep_2_aris_to_polar.py)
+
+### Purpose
+
+Converts raw sonar frames into polar-coordinate images that represent what the sonar was actually "seeing". Raw ARIS data is organized as beams × samples; polar transformation creates intuitive images.
+
+### ARIS Frame Structure
+
+An ARIS frame consists of:
+- **Beams**: Horizontal dimension (64 or 128 beams)
+- **Samples**: Vertical dimension (range bins)
+- **Values**: Acoustic energy in 0-80 dB range (stored as 0-255)
+
+Each sample represents a sector of an annulus. The ensonified area increases with distance from the sonar due to beam spreading.
+
+### Transformation Methods
+
+<Tabs>
+  <Tab title="polar2 (Recommended)">
+    Creates images based on specified resolution (pixels per meter).
+    
+    **Algorithm**:
+    - Calculates polygon vertices for each sample based on beam angles and range
+    - Uses `cv2.fillPoly()` to paint sectors with measured intensity
+    - Accounts for sound velocity and sample timing
+    - Produces high-quality, geometrically accurate images
+    
+    **Configuration**:
+    ```yaml
+    aris_to_polar_method: "polar2"
+    aris_to_polar_polar2_resolution: 1000  # pixels per meter
+    ```
+  </Tab>
+  
+  <Tab title="polar1 (Legacy)">
+    Older method with configurable scale factor. Works but less accurate.
+    
+    **Configuration**:
+    ```yaml
+    aris_to_polar_method: "polar1"
+    aris_to_polar_polar1_scale: 2.0
+    aris_to_polar_polar1_antialiasing: True
+    aris_to_polar_polar1_norm_intensity: False
+    ```
+    
+    <Warning>This method is deprecated. Use polar2 for new projects.</Warning>
+  </Tab>
+  
+  <Tab title="CSV Export">
+    Exports sonar data as CSV point cloud instead of images.
+    
+    Each row contains:
+    - `beam_idx`, `sample_idx` - Position in frame
+    - `sample_start (m)`, `sample_end (m)` - Range boundaries
+    - `center_angle (deg)`, `left_angle(deg)`, `right_angle(deg)` - Beam angles
+    - `intensity (dB)` - Measured acoustic energy
+    
+    **Configuration**:
+    ```yaml
+    aris_to_polar_method: "csv"
+    ```
+    
+    <Note>CSV files are ~12MB per frame with 64-bit precision. Use for analysis requiring exact geometry.</Note>
+  </Tab>
+</Tabs>
+
+### Combining Methods
+
+You can export multiple formats simultaneously:
+
+```yaml
+aris_to_polar_method: "polar2+csv"  # Generates both PNG images and CSV
+```
+
+### Configuration Options
+
+```yaml config.yaml
+# Transformation method
+aris_to_polar_method: "polar2"  # polar1, polar2, csv, or combine with +
+
+# Performance
+aris_to_polar_skip_existing: True  # Skip frames that already exist
+
+# Image format
+aris_to_polar_image_format: png
+aris_to_polar_png_compression: 9  # 0-9, higher = smaller files
+
+# polar2 settings
+aris_to_polar_polar2_resolution: 1000  # pixels per meter
+```
+
+### Usage
+
+```bash
+python scripts/prep_2_aris_to_polar.py
+```
+
+Processing shows progress bar with frame count. Use `aris_to_polar_skip_existing: True` to resume interrupted runs.
+
+### Output
+
+```
+aris_extract/<recording_name>/
+├── polar/
+│   ├── 0000.png
+│   ├── 0001.png
+│   └── ...
+└── (optional) polar/*.csv  # If CSV export enabled
+```
+
+## Step 3: Optical Flow Calculation (prep_3_aris_calc_optical_flow.py)
+
+### Purpose
+
+Calculates optical flow magnitudes for each ARIS recording. This helps:
+- Identify motion onset in recordings
+- Match GoPro footage to ARIS data
+- Trim recordings to relevant portions
+
+### Optical Flow Methods
+
+<CodeGroup>
+```yaml Lucas-Kanade (lk)
+aris_optical_flow_method: "lk"
+
+# Parameters:
+# - winSize: (5, 5)
+# - maxLevel: 5 pyramid levels
+# - maxCorners: 30 features tracked
+# - qualityLevel: 0.4
+# - minDistance: 10 pixels between features
+```
+
+```yaml Farneback
+aris_optical_flow_method: "farnerback"
+
+# Parameters:
+# - pyr_scale: 0.5
+# - levels: 5
+# - winsize: 5
+# - iterations: 2
+# - poly_n: 9 (neighborhood size)
+# - poly_sigma: 2
+```
+</CodeGroup>
+
+### Configuration
+
+```yaml config.yaml
+aris_optical_flow_method: "lk"       # lk or farnerback
+aris_optical_flow_recalc: False      # Recalculate if flow file exists
+```
+
+### Usage
+
+```bash
+python scripts/prep_3_aris_calc_optical_flow.py
+```
+
+### Input Data
+
+The script prefers polar-transformed frames if available, falling back to raw frames:
+
+1. Looks for `polar/` directory first
+2. Uses raw `.pgm` frames if polar not found
+
+### Output
+
+```
+aris_extract/<recording_name>/
+└── <recording_name>_flow.csv  # One row per frame with flow magnitude
+```
+
+The CSV contains a single column of optical flow magnitudes. High values indicate significant motion between consecutive frames.
+
+## Step 4: Motion Onset Marking (prep_4_aris_find_offsets.py)
+
+### Purpose
+
+Graphical interface for manually marking the start and end of actual motion in each ARIS recording. This is necessary because recordings typically start before the gantry begins moving.
+
+### Usage
+
+```bash
+python scripts/prep_4_aris_find_offsets.py
+```
+
+<Note>
+This is an interactive GUI tool. Use the optical flow visualization to identify where motion begins and ends, then mark these boundaries manually.
+</Note>
+
+### Why Manual Marking?
+
+While optical flow is calculated automatically, human judgment is needed to:
+- Account for water turbulence and noise
+- Identify the exact frame where target motion begins
+- Mark the clean end of the trajectory
+- Handle edge cases and anomalies
+
+## Beam Pattern Calibrations
+
+The ARIS Explorer 3000 lens introduces non-linear beam spacing. Calibration data is provided by the ARIS Integration SDK:
+
+- **64-beam mode**: `BeamWidthsAris3000_64`
+- **128-beam mode**: `BeamWidthsAris3000_128`
+
+Each beam has three angles: `[center, left_edge, right_edge]` in degrees.
+
+## Technical Details
+
+### Sound Velocity Calculation
+
+Range calculations account for:
+- `SampleStartDelay`: When acoustic window begins
+- `SamplePeriod`: Time between consecutive samples
+- `SoundSpeed`: Speed of sound in water (varies with temperature/salinity)
+
+Range formula:
+```python
+range_start = sample_start_delay * 1e-6 * sound_speed / 2
+range_end = range_start + sample_period * 1e-6 * sound_speed / 2
+```
+
+Division by 2 accounts for round-trip travel time.
+
+### Coordinate System
+
+Polar-transformed images:
+- **Origin**: Bottom center of image (sonar position)
+- **Y-axis**: Points upward (increasing range)
+- **X-axis**: Left and right spread from center
+- **Angles**: Measured from vertical (0° = straight ahead)
+
+<Note>
+ARIS frames have beams ordered right-to-left. The polar2 method applies `cv2.flip()` to correct orientation.
+</Note>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Corrupt file error: 0x...">
+    The ARIS file version header is invalid. Ensure you're using files from an ARIS Explorer 3000. Expected version: `0x05464444`.
+  </Accordion>
+  
+  <Accordion title="Optical flow calculation very slow">
+    Processing polar images is slower than raw frames. If speed is critical:
+    - Use raw frames (script auto-detects)
+    - Reduce `maxLevel` or `maxCorners` in the script
+    - Use `farnerback` instead of `lk`
+  </Accordion>
+  
+  <Accordion title="Polar images look incorrect">
+    Check your configuration:
+    - Verify `aris_to_polar_polar2_resolution` is reasonable (500-2000)
+    - Ensure `aris_to_polar_image_format` is `png` or `pgm`
+    - Try `polar2` method instead of `polar1`
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Gantry Extraction" icon="route" href="./gantry-extraction">
+    Extract trajectory data from ROS bags
+  </Card>
+  <Card title="GoPro Processing" icon="video" href="./gopro-processing">
+    Process camera footage for synchronization
+  </Card>
+</CardGroup>

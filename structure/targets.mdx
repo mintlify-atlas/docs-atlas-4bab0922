@@ -1,0 +1,529 @@
+---
+title: Target Details
+description: UXO target types, positioning, and 3D models in the dataset
+---
+
+The UXO Dataset 2024 includes recordings of five distinct unexploded ordnance (UXO) target types, each with known 3D position, orientation, and available 3D models.
+
+## Target Types
+
+The dataset includes five UXO targets recorded in a controlled experimental environment:
+
+<CardGroup cols={2}>
+  <Card title="100lbs" icon="bomb">
+    Standard 100-pound aircraft bomb
+    
+    **Position**: (1.251, 1.593, -1.490) m
+    
+    **Primary target** with the most recordings
+  </Card>
+  
+  <Card title="Mortar Shell" icon="crosshairs">
+    Military mortar shell ordnance
+    
+    **Position**: (1.264, 1.437, -1.519) m
+    
+    Smaller cylindrical munition
+  </Card>
+  
+  <Card title="Incendiary" icon="fire">
+    Incendiary device
+    
+    **Position**: (1.235, 1.409, -1.531) m
+    
+    Specialized munition type
+  </Card>
+  
+  <Card title="Cylinder" icon="cube">
+    Cylindrical test object
+    
+    **Position**: (1.278, 1.400, -1.461) m
+    
+    Reference geometry for comparison
+  </Card>
+  
+  <Card title="100lbs Floor" icon="bomb">
+    100-pound bomb in floor position
+    
+    **Position**: (1.174, 1.228, -2.241) m
+    
+    Same bomb at a different location
+  </Card>
+</CardGroup>
+
+## Transform Hierarchy
+
+All target positions and sensor poses are defined in a calibrated transform tree stored in `calibration/transforms.yaml`.
+
+### Coordinate Frames
+
+The dataset uses the following coordinate frame hierarchy:
+
+```
+world (tank fixed frame)
+├── setup/portal_crane (gantry crane base)
+│   └── setup/ar3 (robot arm base)
+│       ├── setup/aris (ARIS mounting point)
+│       │   └── setup/sonar (ARIS acoustic center)
+│       └── setup/gopro_mounting_hole
+│           └── setup/gopro_mounting_axis
+│               └── setup/camera (GoPro optical center)
+└── target/* (UXO target frames)
+```
+
+### Setup Transforms
+
+These transforms define the sensor mounting geometry:
+
+<Accordion title="Portal Crane to AR3">
+**Frame**: `setup/ar3`
+
+**Parent**: `setup/portal_crane`
+
+**Transform**:
+```yaml
+translation:
+  x: 0.0
+  y: 0.174
+  z: -0.338
+rotation:  # Quaternion (x, y, z, w)
+  x: 0.0
+  y: 1.0
+  z: 0.0
+  w: 0.0
+```
+
+This transform positions the AR3 robot arm base relative to the gantry crane.
+</Accordion>
+
+<Accordion title="AR3 to ARIS">
+**Frame**: `setup/aris`
+
+**Parent**: `setup/ar3`
+
+**Transform**:
+```yaml
+translation:
+  x: 0.0
+  y: 0.0
+  z: 0.0
+rotation:
+  x: 0.0
+  y: 0.0
+  z: 0.0
+  w: 1.0
+```
+
+The ARIS is mounted directly on the AR3 (identity transform).
+</Accordion>
+
+<Accordion title="ARIS to Sonar Center">
+**Frame**: `setup/sonar`
+
+**Parent**: `setup/aris`
+
+**Transform**:
+```yaml
+translation:
+  x: -0.108725
+  y: 0.0
+  z: 0.0
+rotation:
+  x: 0.5
+  y: 0.5
+  z: 0.5
+  w: 0.5
+```
+
+Offset from the ARIS mounting point to the acoustic center, including 90° rotations to align coordinate frames.
+</Accordion>
+
+<Accordion title="AR3 to GoPro">
+**Frame**: `setup/camera`
+
+**Parent**: `setup/ar3` (through intermediate mounting frames)
+
+**Transform chain**:
+```yaml
+# AR3 to mounting hole
+setup/gopro_mounting_hole:
+  translation:
+    x: 0.1265
+    y: 0.023
+    z: -0.1055
+  rotation:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    w: 1.0
+
+# Mounting hole to mounting axis
+setup/gopro_mounting_axis:
+  translation:
+    x: 0.02125
+    y: 0.0
+    z: -0.0075
+  rotation:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    w: 1.0
+
+# Mounting axis to camera optical center
+setup/camera:
+  translation:
+    x: 0.01925
+    y: -0.0195
+    z: -0.0415
+  rotation:
+    x: 0.5
+    y: 0.5
+    z: 0.5
+    w: 0.5
+```
+
+The GoPro mounting includes multiple frames to account for the physical mounting bracket geometry.
+</Accordion>
+
+Full setup transforms in `calibration/transforms.yaml:1-71`.
+
+## Target Positions
+
+All target positions are defined relative to the world (tank) coordinate frame.
+
+### 100lbs Bomb
+
+**Frame ID**: `target/100lbs`
+
+**Position**:
+```yaml
+translation:
+  x: 1.251079
+  y: 1.592704
+  z: -1.489828
+rotation:
+  x: 0.0
+  y: 0.0
+  z: 0.0
+  w: 1.0
+```
+
+**Recording folder**: `recordings/100lbs/`
+
+**Description**: Standard 100-pound aircraft bomb, the primary target in the dataset.
+
+### Mortar Shell
+
+**Frame ID**: `target/mortar_shell`
+
+**Position**:
+```yaml
+translation:
+  x: 1.263516
+  y: 1.4371
+  z: -1.51891
+rotation:
+  x: 0.0
+  y: 0.0
+  z: 0.0
+  w: 1.0
+```
+
+**Recording folder**: `recordings/mortar_shell/`
+
+**Description**: Military mortar shell with cylindrical geometry.
+
+### Incendiary
+
+**Frame ID**: `target/incendiary`
+
+**Position**:
+```yaml
+translation:
+  x: 1.2351
+  y: 1.409233
+  z: -1.530784
+rotation:
+  x: 0.0
+  y: 0.0
+  z: 0.0
+  w: 1.0
+```
+
+**Recording folder**: `recordings/incendiary/`
+
+**Description**: Incendiary device munition.
+
+### Cylinder
+
+**Frame ID**: `target/cylinder`
+
+**Position**:
+```yaml
+translation:
+  x: 1.277832
+  y: 1.399541
+  z: -1.461439
+rotation:
+  x: 0.0
+  y: 0.0
+  z: 0.0
+  w: 1.0
+```
+
+**Recording folder**: `recordings/cylinder/`
+
+**Description**: Simple cylindrical reference object for comparison with UXO targets.
+
+### 100lbs Floor
+
+**Frame ID**: `target/100lbs_floor`
+
+**Position**:
+```yaml
+translation:
+  x: 1.174003
+  y: 1.227536
+  z: -2.2411
+rotation:
+  x: 0.0
+  y: 0.0
+  z: 0.0
+  w: 1.0
+```
+
+**Recording folder**: `recordings/100lbs_floor/`
+
+**Description**: The same 100lbs bomb positioned on the tank floor, at a different depth and location.
+
+Full target transforms in `calibration/transforms.yaml:72-127`.
+
+## 3D Models
+
+Textured 3D models are available for all targets in the `3d_models/` directory.
+
+### Model Formats
+
+The models are provided in standard formats:
+
+- **Mesh files**: `.obj`, `.ply`, or similar formats
+- **Texture files**: `.jpg`, `.png` for texture maps
+- **Metadata**: Scale and alignment information
+
+### Model Generation
+
+The 3D models were created using photogrammetry (Agisoft Metashape) from optical imagery of the targets.
+
+<Note>
+Metashape project files are excluded from the export. Only the final textured models are included.
+</Note>
+
+From `release_1_export.py:175-181`:
+```python
+# Copy 3d models
+print('Copying 3d models...')
+model_dir = os.path.join(export_dir, '3d_models/')
+shutil.copytree(os.path.join(data_root, '../3d_models'), 
+                model_dir, 
+                dirs_exist_ok=True, 
+                ignore=lambda src, names: [x for x in names if 'metashape' in x])
+```
+
+### Model Coordinate Frames
+
+The 3D models are aligned to their respective target coordinate frames defined in `transforms.yaml`. This allows:
+
+- Direct overlay of models on sensor data
+- Accurate range and bearing calculations
+- Ground truth for target detection and localization
+
+## Working with Transforms
+
+The dataset includes a transform manager for working with the calibration data.
+
+### Python Example
+
+```python
+import numpy as np
+from scipy.spatial.transform import Rotation as R
+from dataset.calibration.tf_demo.transforms import get_tf_manager
+
+# Load the transform manager
+tm = get_tf_manager()
+
+# Get transform from sonar to a target
+T_sonar_to_100lbs = tm.get_transform("target/100lbs", "setup/sonar")
+
+# Extract position and rotation
+target_pos = T_sonar_to_100lbs[:3, 3]
+target_rot = R.from_matrix(T_sonar_to_100lbs[:3, :3])
+
+print(f"Target position in sonar frame: {target_pos}")
+print(f"Target orientation: {target_rot.as_euler('xyz', degrees=True)}°")
+
+# Calculate range and bearing
+range_to_target = np.linalg.norm(target_pos)
+bearing = np.arctan2(target_pos[1], target_pos[0]) * 180 / np.pi
+
+print(f"Range: {range_to_target:.2f} m")
+print(f"Bearing: {bearing:.2f}°")
+```
+
+### Dynamic Transforms
+
+The gantry position changes with each frame, creating dynamic transforms:
+
+```python
+import pandas as pd
+
+# Load gantry data
+gantry = pd.read_csv('recording_001/gantry.csv', index_col='aris_frame_idx')
+
+# Set gantry position for a specific frame
+frame_idx = 42
+gantry_pos = gantry.loc[frame_idx][['x', 'y', 'z']].values
+
+# Create transform
+T_world_to_gantry = np.eye(4)
+T_world_to_gantry[:3, 3] = gantry_pos
+
+# Add to transform manager
+tm.add_transform("setup/portal_crane", "world", A2B=T_world_to_gantry)
+
+# Now you can get the sonar position in world frame
+T_world_to_sonar = tm.get_transform("setup/sonar", "world")
+sonar_pos = T_world_to_sonar[:3, 3]
+```
+
+This is exactly how the AR3 poses are calculated in `release_1_export.py:18-36`.
+
+## Sonar-to-Target Geometry
+
+With the calibrated transforms and known target positions, you can calculate the exact geometry for each frame:
+
+### Range and Bearing Calculation
+
+```python
+import numpy as np
+import pandas as pd
+from dataset.calibration.tf_demo.transforms import get_tf_manager
+
+def calculate_target_geometry(recording_dir: str, frame_idx: int, target_name: str):
+    """Calculate range and bearing to target for a specific frame."""
+    
+    # Load data
+    gantry = pd.read_csv(f"{recording_dir}/gantry.csv", index_col='aris_frame_idx')
+    frame_meta = pd.read_csv(f"{recording_dir}/aris_frame_meta.csv", 
+                            index_col='FrameIndex')
+    
+    # Get gantry position
+    gantry_pos = gantry.loc[frame_idx][['x', 'y', 'z']].values
+    
+    # Get ARIS orientation
+    aris_angles = frame_meta.loc[frame_idx][['SonarPan', 'SonarTilt', 'SonarRoll']].values
+    
+    # Setup transform manager
+    tm = get_tf_manager()
+    
+    # Add gantry transform
+    T_gantry = np.eye(4)
+    T_gantry[:3, 3] = gantry_pos
+    tm.add_transform("setup/portal_crane", "world", A2B=T_gantry)
+    
+    # Get sonar to target transform
+    T_sonar_to_target = tm.get_transform(f"target/{target_name}", "setup/sonar")
+    
+    # Extract position
+    target_pos = T_sonar_to_target[:3, 3]
+    
+    # Calculate range and bearing
+    range_m = np.linalg.norm(target_pos)
+    bearing_deg = np.arctan2(target_pos[1], target_pos[0]) * 180 / np.pi
+    elevation_deg = np.arctan2(target_pos[2], 
+                              np.sqrt(target_pos[0]**2 + target_pos[1]**2)) * 180 / np.pi
+    
+    return {
+        'range': range_m,
+        'bearing': bearing_deg,
+        'elevation': elevation_deg,
+        'position': target_pos
+    }
+
+# Usage
+geometry = calculate_target_geometry('recordings/100lbs/recording_001', 42, '100lbs')
+print(f"Range: {geometry['range']:.2f} m")
+print(f"Bearing: {geometry['bearing']:.2f}°")
+print(f"Elevation: {geometry['elevation']:.2f}°")
+```
+
+### Ground Truth Labels
+
+The known target positions provide ground truth for:
+
+- **Target detection**: True positive validation
+- **Localization accuracy**: Range/bearing error metrics
+- **Tracking performance**: Multi-frame association
+- **Segmentation**: Pixel-wise target masks
+- **3D reconstruction**: Point cloud accuracy
+
+## Target Specifications
+
+### Physical Dimensions
+
+While exact dimensions depend on the specific munition types, typical characteristics:
+
+<Tabs>
+  <Tab title="100lbs Bomb">
+    - **Type**: Aircraft bomb
+    - **Weight**: 100 pounds (~45 kg)
+    - **Shape**: Cylindrical body with tail fins
+    - **Length**: ~0.8-1.0 m (estimated)
+    - **Diameter**: ~0.15-0.20 m (estimated)
+  </Tab>
+  
+  <Tab title="Mortar Shell">
+    - **Type**: Mortar munition
+    - **Shape**: Cylindrical with tail section
+    - **Length**: ~0.3-0.5 m (estimated)
+    - **Diameter**: ~0.08-0.12 m (estimated)
+  </Tab>
+  
+  <Tab title="Cylinder">
+    - **Type**: Reference object
+    - **Shape**: Simple cylinder
+    - Serves as geometric baseline for comparison
+  </Tab>
+</Tabs>
+
+<Note>
+Exact dimensions can be measured from the 3D models in the `3d_models/` directory.
+</Note>
+
+## Experimental Setup
+
+The targets were positioned in a controlled experimental tank:
+
+- **Fixed positions**: Targets remain stationary during recording
+- **Known geometry**: Accurate surveying and calibration
+- **Controlled environment**: Indoor tank with controlled water conditions
+- **Repeatable trajectories**: Gantry crane enables precise motion control
+
+![Recording setup](media/aris_setup_labeled.jpg)
+
+From the README:
+
+> Using an ARIS 3000 imaging sonar, a GoPro Hero 8 and a custom design gantry crane, we recorded close to 100 trajectories and over 74,000 frames of 3 distinct types of UXO in a controlled environment.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Dataset Overview" href="/structure/overview">
+    Return to the dataset structure overview
+  </Card>
+  <Card title="File Formats" href="/structure/file-formats">
+    Learn about the specific file formats
+  </Card>
+  <Card title="Recordings" href="/structure/recordings">
+    Explore recording folder organization
+  </Card>
+</CardGroup>
